@@ -146,7 +146,7 @@ export class FancentroBrowser extends BaseBrowser {
         });
       }
       const profilePromise = this.page.waitForResponse(response =>
-        response.request().url().includes("https://fancentro.com/api/v1/api/userData"), { timeout: 120000 });
+        response.request().url().includes("https://fancentro.com/api/v2/api/user/data"), { timeout: 120000 });
       const profileResp = await profilePromise;
       const profileData = await profileResp.json();
       this.profile = profileData;
@@ -183,7 +183,7 @@ export class FancentroBrowser extends BaseBrowser {
       // await this.page.waitForTimeout(600000);
       return { alias: this.profile.alias, id: `${this.profile.id}` }
     } catch (error: any) {
-      await this.page.waitForTimeout(10000);
+      console.error(error)
       if (error instanceof BotError)
         throw error;
       else
