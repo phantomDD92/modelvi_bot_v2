@@ -1,5 +1,5 @@
 import { BotError } from "../utils/error";
-import { PostType } from "../types/constant";
+import { POST_PROHIBITED, PostType } from "../types/constant";
 import { IAccountID, IAccountSettings } from "../types/interface";
 import { IMymFansMedia, IMymFansPost } from "../types/mymfans";
 import { BaseBrowser } from "./base-browser";
@@ -80,7 +80,7 @@ export class MymFansBrowser extends BaseBrowser {
 
   public async createPublicPost(title: string, mediaPath: string) {
     try {
-      await this.page.goto("https://creators.mym.fans/app/post/configuration", { timeout: 180000 });
+      await this.page.goto("https://creators.mym.fans/app/post/configuration", { waitUntil: "domcontentloaded", timeout: 180000 });
       // set title
       await this.page.locator("textarea[data-testid='post-creation-form-setup-caption']").first().fill(title);
       await this.page.locator("input[data-testid='post-creation-form-visibility-public-radio']").first().setChecked(true);
@@ -119,6 +119,11 @@ export class MymFansBrowser extends BaseBrowser {
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
+      const isMediaError = await this.page.locator("p[data-testid='field-error-media']").count()
+      if (isMediaError) 
+        return ({
+          post: POST_PROHIBITED
+        });
       throw new BotError("create post failed", {
         where: "MymFansBrowser::createPublicPost",
         error: error.message,

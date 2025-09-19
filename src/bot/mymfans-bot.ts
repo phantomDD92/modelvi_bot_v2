@@ -4,7 +4,7 @@ import { PostApiService } from "../services/post-service";
 import { IBotConfig, IContent } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
-import { ActionType, DEFAULT_LIVING_POSTS, PostResultType } from "../types/constant";
+import { ActionType, DEFAULT_LIVING_POSTS, POST_PROHIBITED, PostResultType } from "../types/constant";
 import { BotError } from "../utils/error";
 
 export class MymFansBot extends PostBot {
@@ -30,17 +30,6 @@ export class MymFansBot extends PostBot {
 
   protected async initAccount(): Promise<void> {
     await super.initAccount();
-    // check account proxy
-    // const proxyAddr = await this.service.pickProxy();
-    const proxyAddr = "cb3ac8e713:zxHGsQ21@195.39.214.75:4444"
-    const proxy = this.parseProxy(proxyAddr);
-    if (!proxy) {
-      throw new BotError("invalid proxy", {
-        where: "MymFans::initAccount",
-        error: "no proxy"
-      });
-    }
-    this.proxy = proxy;
     this.logger.info("init account success");
   }
 
@@ -111,6 +100,11 @@ export class MymFansBot extends PostBot {
         const mediaPath = await this.downloadFile(media.name)
         this.logger.info(`download ${postIndex + 1}st media.`)
         const { media: media1, post, scheduledAt } = await this.browser.createPublicPost(content.title, mediaPath);
+        if (post == POST_PROHIBITED) {
+          await this.service.createLog(false, ActionType.POST, `skip ${postIndex + 1}st post `, { desc: content.title});
+          this.service.updatePostResult(PostResultType.PROHIBITED, undefined, deleteIds);
+          return true;
+        }
         mediaId = media1;
         await this.service.createLog(true, ActionType.UPLOAD, `upload ${postIndex + 1}st media`, { desc: media.name, target: mediaId });
         await this.service.updateContentMedia(postIndex, mediaId);
