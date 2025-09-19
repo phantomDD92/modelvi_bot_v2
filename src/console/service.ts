@@ -12,7 +12,7 @@ export class ConsoleService {
 
   public async getRunnableBots(): Promise<IBotInfo[]> {
     try {
-      let endpoint = `/platform/${this.config.platform}`;
+      let endpoint = `/post/platform/${this.config.platform}`;
       if (this.config.platform == Platform.FANLIKE)
         endpoint = `/like/platform/${this.config.platform}`;
       const payload = await this.getRequest(endpoint)
