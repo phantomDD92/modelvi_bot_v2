@@ -227,7 +227,7 @@ export class PostApiService {
     }
   }
 
-  public async createLog(success: boolean, action: number, log: string, extra: any): Promise<void> {
+  public async createLog(success: boolean, action: number, log: string, extra: any = {}): Promise<void> {
     try {
       this.logger.info(log);
       await this.postRequest(`/log`, { action, success, log, extra });

@@ -85,12 +85,14 @@ export class MymFansBrowser extends BaseBrowser {
       await this.page.locator("textarea[data-testid='post-creation-form-setup-caption']").first().fill(title);
       await this.page.locator("input[data-testid='post-creation-form-visibility-public-radio']").first().setChecked(true);
       await this.page.locator("input[data-testid='upload-input']").first().setInputFiles(mediaPath);
-      // click publish
-      const mediaPromise = this.page.waitForResponse("https://api.mym.fans/medias/upload");
-      const postsPromise = this.page.waitForResponse("https://api.mym.fans/posts");
 
+      // wait media upload for 5 minutes
+      const mediaPromise = this.page.waitForResponse("https://api.mym.fans/medias/upload", { timeout: 300000 });
+      const postsPromise = this.page.waitForResponse("https://api.mym.fans/posts", { timeout: 300000 });
+
+      // click publish
       await this.page.locator("button[data-testid='post-creation-desktop-submit-button']").first().click();
-      const mediaResp = await mediaPromise;
+      const [mediaResp, postsResp] = await Promise.all([mediaPromise, postsPromise]);
       if (!mediaResp.ok()) throw new BotError("upload media failed", {
         where: "MymFansBrowser::createPublicPost",
         method: "POST",
@@ -99,7 +101,6 @@ export class MymFansBrowser extends BaseBrowser {
         status: mediaResp.statusText(),
         response: await mediaResp.text()
       });
-      const postsResp = await postsPromise;
       if (!postsResp.ok()) throw new BotError("create post failed", {
         where: "MymFansBrowser::createPublicPost",
         method: "POST",
@@ -343,7 +344,7 @@ export class MymFansBrowser extends BaseBrowser {
       await this.page.goto("https://creators.mym.fans/app/incomes", { waitUntil: "domcontentloaded", timeout: 120000 });
       const chartCount = await this.page.locator("div#charts-container").count()
       if (chartCount == 0)
-        return 0; 
+        return 0;
       const chartData = await this.page.locator("div#charts-container").getAttribute("data-charts");
       if (!chartData)
         return 0;
