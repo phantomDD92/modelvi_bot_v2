@@ -1,0 +1,252 @@
+import { MaloumBrowser } from "../browser/maloum-browser";
+import { PostApiService } from "../services/post-service";
+import { DEFAULT_LIVING_POSTS, ScheduleStatus } from "../types/constant";
+import { IBotConfig, IChatMessage, ICommentParams, IContent, IMedia, ISchedulePost, IScheduleResult } from "../types/interface";
+import { BotError } from "../utils/error";
+import { Logger } from "../utils/logger";
+import { PostBot } from "./post-bot";
+
+export class MaloumBot extends PostBot {
+  protected browser!: MaloumBrowser;
+  protected service!: PostApiService;
+
+  constructor(config: IBotConfig, logger: Logger) {
+    super(config, logger)
+  }
+
+  // init headless browser
+  protected async initBrowser(): Promise<void> {
+    this.browser = new MaloumBrowser(this.config, this.logger);
+    await super.initBrowser();
+  }
+
+  // init api service
+  protected async initService(): Promise<void> {
+    this.service = new PostApiService(this.config, this.logger)
+    await super.initService();
+  }
+
+  // init account for f2f bot
+  protected async initAccount(): Promise<void> {
+    await super.initAccount();
+    // check account proxy
+    this.logger.info("init account success");
+  }
+
+  private async deleteOldPosts() {
+    try {
+      // get all free posts
+      const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const postRemains = this.settings.params?.postRemains || [];
+      const postIds: string[] = await this.browser.getSelfPosts();
+      const postsPublished = postIds.filter(postId => postRemains.includes(postId));
+      this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`);
+      const deleteIds = [];
+      while (postsPublished.length > postCount) {
+        const postDeleting = postsPublished.pop()
+        if (postDeleting) {
+          await this.browser.deletePost(postDeleting);
+          deleteIds.push(postDeleting)
+          this.logger.info(`delete the post(${postDeleting})`);
+        }
+      }
+      return deleteIds;
+    } catch (error: any) {
+      this.logger.notifyError(error)
+      return []
+    }
+  }
+
+  private async getMedia(folderName: string, media: IMedia): Promise<string> {
+    const folder = await this.browser.getFolder(folderName);
+    let mediaId = media?.uuid;
+    if (mediaId)
+      mediaId = await this.browser.findMediaInFolder(folder, mediaId)
+    if (!mediaId) {
+      const image = await this.downloadFile(media.name);
+      this.logger.info(`download media(${media.name})`);
+      mediaId = await this.browser.uploadMediaInFolder(folder, image);
+    }
+    if (!mediaId)
+      throw new BotError("get media failed");
+    return mediaId
+  }
+
+  private async createPublicPost(content: IContent, mediaId: string): Promise<string | undefined> {
+    const postId = await this.browser.publishPost(content.title, content.postTags, mediaId)
+    return postId;
+  }
+
+  protected async doPost(): Promise<boolean> {
+    if (!this.settings.params?.contents || this.settings.params.contents.length == 0) {
+      this.logger.info(`account has no content to post`);
+      await this.service.updatePostSetting(true, undefined, []);
+      return true;
+    }
+    const contents = this.settings.params.contents;
+    let postIndex = this.settings.params.postContentIndex || 0;
+    if (postIndex >= contents.length)
+      postIndex = 0;
+    const content: IContent = contents[postIndex];
+    const media = content.media[0];
+    try {
+      await this.browser.refreshToken();
+      let folderName = content.folder;
+      if (!folderName || folderName == "")
+        folderName = "Posts";
+      let mediaId = await this.getMedia(folderName, media)
+      if (mediaId != media.uuid) {
+        await this.service.createHistory(`upload ${postIndex + 1}st media(${mediaId})`);
+        await this.service.updateContentMedia(postIndex, mediaId);
+      }
+      const postId = await this.createPublicPost(content, mediaId)
+      if (postId) {
+        await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
+      }
+      const deleteIds = await this.deleteOldPosts();
+      if (deleteIds.length > 0) {
+        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
+      }
+      this.service.updatePostSetting(true, postId, deleteIds);
+      return true;
+    } catch (error: any) {
+      this.logger.notifyError(error);
+      await this.service.updatePostSetting(true, undefined, []);
+      await this.service.createHistory(`create ${postIndex + 1}st post(${content.title}) failed`);
+      return false;
+    }
+  }
+
+  protected async doComment(): Promise<boolean> {
+    // get comment
+    let post;
+    try {
+      const params: ICommentParams = await this.service.updateCommentSetting();
+      if (params.comments.length === 0)
+        return true;
+      await this.browser.refreshToken();
+      let posts = await this.browser.getRecentPosts();
+      posts = posts.reverse();
+      for (post of posts) {
+        if (post.createdBy.username != this.config.alias && !params.block_users.includes(post.createdBy.username)) {
+          await this.browser.followPost(post._id)
+          const comment = this.pickup(params.comments);
+          await this.browser.commentPost(post._id, comment);
+          await this.service.createHistory(`comment ${post.createdBy.username}'s post`);
+          break;
+        }
+      }
+      return true;
+    } catch (error: any) {
+      this.logger.notifyError(error)
+      await this.service.createHistory(`comment post failed`);
+      return false;
+    }
+  }
+
+  protected async doTest(): Promise<boolean> {
+    try {
+      this.tested = true;
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  }
+
+  public async doChat(): Promise<boolean> {
+    try {
+      await this.service.updateChatSetting();
+      const messages = await this.browser.getUnreadChats();
+      if (messages.length > 0) {
+        this.logger.info(`find ${messages.length} unread messages`)
+        await this.sendChatNotification(messages);
+      }
+      return true;
+    } catch (error) {
+      this.logger.notifyError(error);
+      return true
+    }
+  }
+
+  protected async doCalibrate(): Promise<boolean> {
+    try {
+      const revenue = await this.browser.getMonthlyEarnings();
+      const available = await this.service.checkBalance(revenue);
+      if (!available)
+        await this.service.createHistory(`bot closed due to no balance`);
+      return available;
+    } catch (error: any) {
+      this.logger.notifyError(error);
+      return false;
+    }
+  }
+
+  private async checkPublishedSchedules(schedules: ISchedulePost[]): Promise<IScheduleResult[]> {
+    const postIds = await this.browser.getSelfPosts();
+    const schedulePostIds = schedules.filter(element => element.post != undefined).map(element => element.post);
+    if (schedulePostIds.length == 0) {
+      this.logger.info(`no published posts among ${postIds.length} posts`);
+      return []
+    }
+    const publishedPosts = postIds.filter(postId => schedulePostIds.includes(postId));
+    const results = publishedPosts.map(post => {
+      const schedule = schedules.find(element => element.post == post)
+      return ({ id: schedule?._id, post: schedule?.post, status: ScheduleStatus.FINISHED });
+    })
+    this.logger.info(`${results.length} published posts among ${postIds.length} posts`);
+    return results;
+  }
+
+  private async publishSchedule(post: ISchedulePost): Promise<void> {
+    const schedule = post.schedule;
+    try {
+      const mediaId = await this.getMedia(schedule.folder, schedule.media);
+      await this.service.createHistory(`upload media(${mediaId}, ${schedule.media.name}) for schedule post(${schedule.title})`);
+      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaId, schedule.type)
+      await this.service.createHistory(`create scheduled post(${postId}, ${schedule.title})`);
+      await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
+    } catch (error) {
+      this.logger.notifyError(error);
+      await this.service.createHistory(`create scheduled post(${schedule.title}) failed`);
+      await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
+    }
+  }
+
+  protected async doSchedule(): Promise<boolean> {
+    try {
+      let results: IScheduleResult[] = [];
+      // update next schedule time and get schedule list
+      const schedules = await this.service.updateScheduleSetting();
+      const waitingSchedules = schedules.filter(schedule => schedule.status == ScheduleStatus.WAITING);
+      const scheduledSchedules = schedules.filter(schedule => schedule.status == ScheduleStatus.SCHEDULED);
+      this.logger.info(`waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`);
+      // check published schedules
+      if (scheduledSchedules.length > 0)
+        results = await this.checkPublishedSchedules(scheduledSchedules);
+      // update schedules status
+      if (results.length > 0) {
+        await this.service.updateScheduleResults(results);
+        this.logger.info(`update ${results.length} scheduled posts`)
+      }
+      // schedule waiting schedules
+      let count = 0;
+      for (var schedule of waitingSchedules) {
+        await this.publishSchedule(schedule);
+        count += 1;
+        if (count >= 3)
+          break;
+      }
+      return true;
+    } catch (error) {
+      this.logger.notifyError(error);
+      return false;
+    }
+  }
+
+  protected needStory(): boolean {
+    return false
+  }
+
+
+}

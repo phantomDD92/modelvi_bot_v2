@@ -1,0 +1,739 @@
+import { BotError, SessionTimeoutError } from "../utils/error";
+import { PostType } from "../types/constant";
+import { IAccountID, IAccountSettings, IBotConfig, IChatMessage, IContent } from "../types/interface";
+import { IMaloumCategory, IMaloumChat, IMaloumEarning, IMaloumFolder, IMaloumMediaInfo, IMaloumPost } from "../types/maloum";
+import { Logger } from "../utils/logger";
+import { BaseBrowser } from "./base-browser";
+import moment from "moment";
+
+interface IMaloumTokenResponse {
+  access_token: string,
+  token_type: string,
+  refresh_token: string,
+};
+
+export class MaloumBrowser extends BaseBrowser {
+
+  // constructor
+  constructor(config: IBotConfig, logger: Logger) {
+    super(config, logger)
+  }
+
+  public async home(): Promise<void> {
+    try {
+      await this.page.goto("https://maloum.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    } catch (error: any) {
+      throw new BotError("proxy blocked", {
+        where: "MaloumBrowser::home",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async afterHome(): Promise<void> {
+    await this.closeConsentModal();
+  }
+
+  private async closeConsentModal() {
+    try {
+      await this.page.locator("div#cmpbox span#cmpwelcomebtnyes > a.cmpboxbtnyes ").first().click({ timeout: 10000 });
+      this.logger.info("close consent modal");
+    } catch (error: any) {
+    }
+  }
+
+  public async refreshToken(): Promise<void> {
+    await this.page.goto("https://app.maloum.com/", { timeout: 600000 });
+  }
+
+  // set content filter
+  protected async setFilter() {
+    // filter images
+    // await this.context.route(/(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/, route => route.abort())
+    // filter google analytics
+    await this.context.route(/https:\/\/www\.google-analytics\.com\/.*/, route => route.abort());
+    // set token filter
+    this.page.on('response', async (response) => {
+      const url = response.url();
+      if (url.includes('https://srswgacczfgjttwdpuia.supabase.co/auth/v1/token') && response.request().method() == "POST" && response.status() == 200) {
+        const respData: IMaloumTokenResponse = await response.json(); // get response body as Buffer
+        this.headers["Authorization"] = `Bearer ${respData.access_token}`;
+        this.logger.info("refresh access token");
+      }
+    });
+  }
+
+  public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
+    try {
+      // await this.page.waitForTimeout(60000);
+      // go to login page
+      await this.page.goto("https://app.maloum.com/login?returnPath=/", { waitUntil: "domcontentloaded", timeout: 60000 });
+      this.closeConsentModal();
+      // input email and password
+      await this.page.locator("form input[name='usernameOrEmail']").waitFor();
+      await this.page.locator("form input[name='usernameOrEmail']").first().fill(setting.email);
+      await this.page.locator("form input[name='password']").first().fill(setting.password);
+
+      // prepare wait login response
+      // const mePromise = this.page.waitForResponse(response => {
+      //   return response.url() === "https://api.maloum.com/users/me" && response.request().method() === "GET"
+      // }, { timeout: 30000 });
+      const loginPromise = this.page.waitForResponse("https://api.maloum.com/user-management/login");
+
+      // click sign-in button
+      await this.page.locator("form button", { hasText: "Login" }).first().click();
+      const loginResp = await loginPromise;
+      if (!loginResp.ok())
+        throw new BotError("wrong credentials", {
+          where: "MaloumBrowser::login",
+          method: "POST",
+          endpoint: "https://api.maloum.com/user-management/login",
+          params: loginResp.request().postData(),
+          status: loginResp.statusText(),
+          response: await loginResp.text(),
+        })
+      // await this.page.waitForTimeout(3000);
+      // input email and password again
+      // await this.page.locator("form input[name='identifier']").waitFor();
+      // await this.page.locator("form input[name='identifier']").first().fill(setting.email);
+      // await this.page.locator("form input[name='password']").first().fill(setting.password);
+
+      // prepare wait login response
+      const mePromise = this.page.waitForResponse("https://api.maloum.com/users/current");
+      // // click sign-in button
+      // await this.page.locator("form input[type='submit']").first().click();
+      // // check login api response
+      const meResp = await mePromise;
+      if (!meResp.ok()) {
+        throw new BotError("login failed", {
+          where: "MaloumBrowser::login",
+          method: "GET",
+          endpoint: "https://api.maloum.com/users/current",
+          status: meResp.statusText(),
+          response: await meResp.text()
+        });
+      }
+      this.headers = await meResp.request().allHeaders();
+      const meData = await meResp.json();
+      if (!meData.isCreator)
+        throw new BotError("not creator account", {
+          where: "MaloumBrowser::login",
+          method: "GET",
+          endpoint: "https://api.maloum.com/users/current",
+          status: meResp.statusText(),
+          response: await meResp.text()
+        })
+      return { alias: meData.username, id: meData._id };
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("wrong credentials", {
+        where: "MaloumBrowser::login",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async getFolder(folderName: string): Promise<IMaloumFolder> {
+    try {
+      let folder;
+      // find folder
+      const resp = await this.page.request.get("https://api.maloum.com/vault/folders", {
+        headers: this.headers,
+        params: { limit: 15 }
+      });
+      if (!resp.ok())
+        throw new BotError("get folders failed", {
+          where: "MaloumBrowser::getFolder",
+          method: "GET",
+          endpoint: "https://api.maloum.com/vault/folders",
+          status: resp.statusText(),
+          response: await resp.text()
+        });
+      const respData = await resp.json();
+      const folders: IMaloumFolder[] = respData.data || [];
+      folder = folders.find(item => item.name.toLowerCase() == folderName.toLowerCase());
+      if (folder)
+        return folder;
+      const resp1 = await this.page.request.post("https://api.maloum.com/vault/folders",
+        { headers: this.headers, data: { name: folderName } }
+      );
+      if (!resp1.ok())
+        throw new BotError("create folder failed", {
+          where: "MaloumBrowser::getFolder",
+          method: "POST",
+          endpoint: "https://api.maloum.com/vault/folders",
+          status: resp.statusText(),
+          response: await resp.text()
+        });
+      folder = await resp1.json();
+      return folder;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("get folder failed", {
+        where: "MaloumBrowser::getFolder",
+        error: error.message,
+        stack: error.stack,
+      })
+    }
+  }
+
+  public async deleteFolder(folderId: string): Promise<void> {
+    try {
+      const resp = await this.page.request.delete(`https://api.maloum.com/vault/folders/${folderId}`,
+        {
+          headers: this.headers,
+          params: { deleteMedia: false }
+        }
+      );
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::deleteFolder",
+          });
+        else
+          throw new BotError("delete folder failed", {
+            where: "MaloumBrowser::deleteFolder",
+            method: "DELETE",
+            endpoint: `https://api.maloum.com/vault/folders/${folderId}`,
+            params: { deleteMedia: false },
+            status: resp.statusText(),
+            response: await resp.text(),
+          });
+      }
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("delete folder failed", {
+        where: "MaloumBrowser::deleteFolder",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async getSelfPosts(): Promise<string[]> {
+    try {
+      const postIds: string[] = [];
+      let next;
+      let page = 0
+      const resp = await this.page.request.get("https://api.maloum.com/posts/me", {
+        headers: this.headers,
+        params: { limit: 30 }
+      });
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::getSelfPosts",
+          });
+        else
+          throw new BotError("get self posts failed", {
+            where: "MaloumBrowser::getSelfPosts",
+            method: "GET",
+            endpoint: "https://api.maloum.com/posts/me",
+            params: { limit: 30 },
+            status: resp.statusText(),
+            response: await resp.text(),
+          });
+      }
+      const respData = await resp.json();
+      next = respData.next;
+      let posts: IMaloumPost[] = respData.data || []
+      postIds.push(...posts.map(post => post._id));
+      while (next) {
+        page += 1
+        const respNext = await this.page.request.get("https://api.maloum.com/posts/me", {
+          headers: this.headers,
+          params: { next, limit: 30 }
+        });
+        if (!respNext.ok()) {
+          throw new BotError("get self posts failed", {
+            where: "MaloumBrowser::getSelfPosts",
+            method: "GET",
+            endpoint: "https://api.maloum.com/posts/me",
+            params: { next, limit: 30 },
+            status: resp.statusText(),
+            response: await resp.text(),
+          });
+        }
+        const respNextData = await respNext.json();
+        next = respNextData.next;
+        posts = respData.data || []
+        postIds.push(...posts.map(post => post._id));
+        if (page > 5)
+          break;
+      }
+      return postIds;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("get posts failed", {
+        where: "MaloumBrowser::getSelfPosts",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async getRecentPosts(page: number = 0): Promise<IMaloumPost[]> {
+    try {
+      const resp = await this.page.request.get("https://api.maloum.com/content/discovery", {
+        headers: this.headers,
+        params: { next: page * 30, limit: 30 }
+      });
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::getRecentPosts",
+          });
+        else
+          throw new BotError("get recent posts failed", {
+            where: "MaloumBrowser::getRecentPosts",
+            method: "GET",
+            endpoint: "https://api.maloum.com/content/discovery",
+            params: { next: page * 30, limit: 30 },
+            status: resp.statusText(),
+            response: await resp.text(),
+          });
+      }
+      const respData = await resp.json();
+      return respData.data
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("get posts failed", {
+        where: "MaloumBrowser::getRecentPosts",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+
+  public async findMediaInFolder(folder: IMaloumFolder, mediaId: string): Promise<string | undefined> {
+    try {
+      const resp = await this.page.request.get(`https://api.maloum.com/vault/folders/${folder._id}/media`,
+        {
+          headers: this.headers,
+          params: { limit: 50 },
+        }
+      );
+      if (!resp.ok()) {
+        throw new BotError("find media failed", {
+          where: "MaloumBrowser::findMediaInFolder",
+          method: "GET",
+          endpoint: `https://api.maloum.com/vault/folders/${folder._id}/media`,
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
+      const respData = await resp.json();
+      const items: IMaloumMediaInfo[] = respData.data || [];
+      const result = items.find(item => item.media?.uploadId == mediaId);
+      return result ? result.media.uploadId : undefined;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("find media failed", {
+        where: "MaloumBrowser::findMediaInFolder",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async deletePost(postId: string): Promise<void> {
+    try {
+      const resp = await this.page.request.delete(`https://api.maloum.com/posts/${postId}`,
+        { headers: this.headers }
+      );
+      if (!resp.ok()) {
+        if (resp.status() == 401) throw new SessionTimeoutError("session timeout", {
+          where: "MaloumBrowser::deletePost",
+        });
+        else throw new BotError("delete post failed", {
+          where: "MaloumBrowser::deletePost",
+          method: "DELETE",
+          endpoint: `https://api.maloum.com/posts/${postId}`,
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("delete post failed", {
+        where: "MaloumBrowser::deletePost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async uploadMediaInFolder(folder: IMaloumFolder, image: string): Promise<string> {
+    try {
+      // go to vault page
+      await this.page.goto("https://app.maloum.com/vault", { waitUntil: "load", timeout: 120000 });
+      // open folder
+      await this.page.locator(`div#leftColumn div[title='${folder.name}']`).waitFor();
+      await this.page.locator(`div#leftColumn div[title='${folder.name}']`).first().click();
+      await this.page.waitForTimeout(1000);
+      // upload image
+      const uploadPromise = this.page.waitForResponse(response => {
+        return response.url().includes("https://api.maloum.com/uploads/generate-upload-url") && response.request().method() === "POST"
+      }, { timeout: 600000 });
+      await this.page.locator("div#rightColumn input[type='file']").first().setInputFiles(image);
+      const uploadResp = await uploadPromise;
+      if (!uploadResp.ok()) {
+        throw new BotError("upload media failed", {
+          where: "MaloumBrowser::uploadMediaInFolder",
+          method: "POST",
+          endpoint: `https://api.maloum.com/uploads/generate-upload-url`,
+          status: uploadResp.statusText(),
+          response: await uploadResp.text(),
+        });
+      }
+      const uploadData = await uploadResp.json();
+      return uploadData.id
+
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("upload media failed", {
+        where: "MaloumBrowser::uploadMediaInFolder",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  private async getCategories(): Promise<IMaloumCategory[]> {
+    const resp = await this.page.request.get("https://api.maloum.com/categories", {
+      headers: this.headers
+    })
+    if (!resp.ok()) {
+      throw new BotError("get categories failed", {
+        where: "MaloumBrowser::getCategories",
+        method: "GET",
+        endpoint: `https://api.maloum.com/categories`,
+        status: resp.statusText(),
+        response: await resp.text(),
+      });
+    }
+    const respData = await resp.json();
+    return respData ? respData.filter((item: IMaloumCategory) => item.type == "POST" || item.type == "ALL") : [];
+  }
+
+  public async createPublicPost(content: IContent): Promise<IMaloumPost> {
+    try {
+      const categories = await this.getCategories();
+      const postTags = (content.postTags || []).map(tag => tag.toLowerCase());
+      postTags.push("public");
+      const cats = categories.filter(cat => postTags.includes(cat.name.toLowerCase())).map(cat => cat._id)
+      const resp = await this.page.request.post("https://api.maloum.com/posts", {
+        headers: this.headers,
+        data: {
+          caption: content.title,
+          categories: cats.slice(0, 3),
+          public: true,
+          mediaIds: [content.media[0].uuid]
+        }
+      });
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::createPublicPost",
+          });
+        else
+          throw new BotError("create post failed", {
+            where: "MaloumBrowser::createPublicPost",
+            error: resp.statusText(),
+            data: {
+              caption: content.title,
+              categories: cats.slice(0, 3),
+              public: true,
+              mediaIds: [content.media[0].uuid]
+            }
+          });
+      }
+      const respData = await resp.json();
+      return respData;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("create post failed", {
+        where: "MaloumBrowser::createPublicPost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async followPost(postId: string): Promise<void> {
+    try {
+      const resp = await this.page.request.post(`https://api.maloum.com/posts/${postId}/like`, {
+        headers: this.headers
+      });
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::followPost",
+          });
+        else
+          throw new BotError("follow post failed", {
+            where: "MaloumBrowser::followPost",
+            method: "POST",
+            endpoint: `https://api.maloum.com/posts/${postId}/like`,
+            status: resp.statusText(),
+            response: await resp.text(),
+          });
+      }
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("follow post failed", {
+        where: "MaloumBrowser::followPost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async commentPost(postId: string, text: string): Promise<void> {
+    try {
+      const resp = await this.page.request.post(`https://api.maloum.com/posts/${postId}/comments`, {
+        headers: this.headers,
+        data: { text }
+      });
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::commentPost",
+          });
+        else
+          throw new BotError("comment post failed", {
+            where: "MaloumBrowser::commentPost",
+            method: "POST",
+            endpoint: `https://api.maloum.com/posts/${postId}/comments`,
+            params: { text },
+            status: resp.statusText(),
+            response: await resp.text(),
+          });
+      }
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("comment post failed", {
+        where: "MaloumBrowser::commentPost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+
+  public async getUnreadChats(): Promise<IChatMessage[]> {
+    try {
+      const resp = await this.page.request.get(
+        "https://api.maloum.com/chats",
+        {
+          headers: this.headers,
+          params: { filter: "unread", limit: 15 }
+        }
+      );
+      const respData = await resp.json();
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::getUnreadChats",
+          });
+        else
+          throw new BotError("get unread chats failed", {
+            where: "MaloumBrowser::commentPost",
+            method: "GET",
+            endpoint: `https://api.maloum.com/chats?filter=unread`,
+            status: resp.statusText(),
+            response: await resp.text(),
+          });
+      }
+      const chats: IMaloumChat[] = respData.data || [];
+      return chats.map(chat => ({
+        user: chat.chatPartner.username,
+        message: chat.lastRelevantMessage.text,
+        time: new Date(chat.lastRelevantMessage.sentAt)
+      })).filter(chat => chat.user != "maloum.official");
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("get chats failed", {
+        where: "MaloumBrowser::getUnreadChats",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async schedulePost(scheduledAt: Date, title: string, tags: string[], mediaId: string, type?: number): Promise<string> {
+    try {
+      const categories = await this.getCategories();
+      const postTags = (tags || []).map(tag => tag.toLowerCase());
+      postTags.push("public");
+      const cats = categories.filter(cat => postTags.includes(cat.name.toLowerCase())).map(cat => cat._id)
+      let free = true;
+      if (type == PostType.FANS || type == PostType.PAID)
+        free = false;
+      const params = {
+        caption: title,
+        categories: cats.slice(0, 3),
+        public: free,
+        mediaIds: [mediaId],
+        scheduledAt: moment().isAfter(scheduledAt, "hour") ? moment().add(1, "hour").utc().toISOString() : moment(scheduledAt).utc().toISOString(),
+      };
+      const resp = await this.page.request.post("https://api.maloum.com/posts", {
+        headers: this.headers,
+        data: params
+      });
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::schedulePost",
+          });
+        else
+          throw new BotError("schedule post failed", {
+            where: "MaloumBrowser::schedulePost",
+            method: "POST",
+            endpoint: `https://api.maloum.com/posts`,
+            status: resp.statusText(),
+            response: await resp.text(),
+            params: JSON.stringify(params)
+          });
+      }
+      const respData: IMaloumPost = await resp.json();
+      return respData._id;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("schedule post failed", {
+        where: "MaloumBrowser::schedulePost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async publishPost(title: string, tags: string[], mediaId: string, type?: number): Promise<string> {
+    try {
+      const categories = await this.getCategories();
+      const postTags = (tags || []).map(tag => tag.toLowerCase());
+      postTags.push("public");
+      const cats = categories.filter(cat => postTags.includes(cat.name.toLowerCase())).map(cat => cat._id)
+      let free = true;
+      if (type == PostType.FANS || type == PostType.PAID)
+        free = false;
+      const resp = await this.page.request.post("https://api.maloum.com/posts", {
+        headers: this.headers,
+        data: {
+          caption: title,
+          categories: cats.slice(0, 3),
+          public: free,
+          mediaIds: [mediaId],
+        }
+      });
+      if (!resp.ok()) {
+        if (resp.status() == 401)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::publishPost",
+          });
+        else
+          throw new BotError("publish post failed", {
+            where: "MaloumBrowser::publishPost",
+            method: "POST",
+            endpoint: `https://api.maloum.com/posts`,
+            status: resp.statusText(),
+            response: await resp.text(),
+            params: {
+              caption: title,
+              categories: cats.slice(0, 3),
+              public: free,
+              mediaIds: [mediaId]
+            }
+          });
+      }
+      const respData: IMaloumPost = await resp.json();
+      return respData._id;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("publish post failed", {
+        where: "MaloumBrowser::publishPost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async getMonthlyEarnings(): Promise<number> {
+    try {
+      let sum: number = 0;
+      const from = moment().subtract(1, "month").startOf("day");
+      const resp = await this.page.request.get("https://api.maloum.com/transactions/history", {
+        headers: this.headers,
+        params: { limit: 15 },
+      });
+      let next;
+      if (!resp.ok())
+        throw new BotError("get earnings failed", {
+          where: "MaloumBrowser::getMonthlyEarnings",
+          method: "GET",
+          endpoint: "https://api.maloum.com/transactions/history",
+          params: { limit: 15 },
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      const respData = await resp.json();
+      // console.log(respData);
+      const items: IMaloumEarning[] = respData.data || [];
+      next = respData.next;
+      for (var item of items) {
+        if (new Date(item.executedAt) >= from.toDate()) {
+          sum += item.price.payoutAmount || 0;
+        }
+      }
+      while (next && new Date(next) > from.toDate()) {
+        const resp = await this.page.request.get("https://api.maloum.com/transactions/history", {
+          headers: this.headers,
+          params: { limit: 15, next },
+        });
+        if (!resp.ok())
+          throw new BotError("get earnings failed", {
+            where: "MaloumBrowser::getMonthlyEarnings",
+            method: "GET",
+            endpoint: "https://api.maloum.com/transactions/history",
+            params: { limit: 15 },
+            status: resp.statusText(),
+            response: await resp.text(),
+          });
+        const respData = await resp.json();
+        next = respData.next;
+        const items: IMaloumEarning[] = respData.data || [];
+        for (var item of items) {
+          if (new Date(item.executedAt) >= from.toDate()) {
+            sum += item.price.payoutAmount || 0;
+          }
+        }
+      }
+      return sum;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("get earnings failed", {
+        where: "MaloumBrowser::getMonthlyEarnings",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+}

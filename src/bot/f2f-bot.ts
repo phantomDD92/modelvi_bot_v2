@@ -1,0 +1,367 @@
+import moment from 'moment';
+
+import { PostBot } from './post-bot';
+
+import { DEFAULT_LIVING_POSTS, DEFAULT_STORY_MAX_COUNT, F2FStoryType, ScheduleStatus } from '../types/constant';
+import { IF2fFolder, IF2fPost } from '../types/f2f';
+import { IBotConfig, IChatMessage, ICommentParams, IContent, IMedia, ISchedulePost, IScheduleResult } from '../types/interface';
+import { F2fBrowser } from '../browser/f2f-browser';
+import { Logger } from '../utils/logger';
+import { PostApiService } from '../services/post-service';
+
+export class F2fBot extends PostBot {
+  // headless browser for f2f bot
+  protected browser!: F2fBrowser;
+  // api service for f2f bot
+  protected service!: PostApiService;
+
+  // constructor
+  constructor(config: IBotConfig, logger: Logger) {
+    super(config, logger)
+  }
+
+  // init headless browser
+  protected async initBrowser(): Promise<void> {
+    this.browser = new F2fBrowser(this.config, this.logger);
+    await super.initBrowser();
+  }
+
+  // init api service
+  protected async initService(): Promise<void> {
+    this.service = new PostApiService(this.config, this.logger)
+    await super.initService();
+  }
+
+  // init account for f2f bot
+  protected async initAccount(): Promise<void> {
+    await super.initAccount();
+    this.logger.info("init account success");
+  }
+
+  private async removePosts(): Promise<string[]> {
+    try {
+      // get all free posts
+      const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const postRemains = this.settings.params?.postRemains || [];
+      const postIds: string[] = await this.browser.getSelfPosts();
+      const postsPublished = postIds.filter(postId => postRemains.includes(postId));
+      this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`);
+      const deleteIds = [];
+      while (postsPublished.length > postCount) {
+        const postDeleting = postsPublished.pop()
+        if (postDeleting) {
+          await this.browser.deletePost(postDeleting);
+          deleteIds.push(postDeleting)
+          this.logger.info(`delete the post(${postDeleting})`);
+        }
+      }
+      return deleteIds;
+    } catch (error: any) {
+      this.logger.notifyError(error)
+      return []
+    }
+  }
+
+  private async getFolder(folderName: string): Promise<string> {
+    // find a folder from content
+    let folderId = await this.browser.findFolder(folderName);
+    // if folder does not exist, create the folder
+    if (!folderId) {
+      folderId = await this.browser.createFolder(folderName);
+      await this.service.createHistory(`create a folder(${folderName})`);
+    }
+    return folderId;
+  }
+
+  private async getMedia(folderName: string, media: IMedia): Promise<string> {
+    const folderId = await this.getFolder(folderName);
+    let mediaId: string | undefined = undefined;
+    // check if media already exists in folder
+    if (media.uuid)
+      mediaId = await this.browser.findMediaInFolder(folderId, media.uuid);
+
+    // if media does not exist in folder, upload a media
+    if (!mediaId) {
+      const path = await this.downloadFile(media.name);
+      this.logger.info(`download media(${media.name})`);
+      mediaId = await this.browser.uploadMedia(folderId, path);
+    }
+    return mediaId;
+  }
+
+  private async createPublicPost(content: IContent, postIndex: number, mediaId: string): Promise<string | undefined> {
+    const postId = await this.browser.createEmptyPost(mediaId);
+    let success = await this.browser.setPostTitle(postId, content.title, content.postTags);
+    if (!success) {
+      await this.service.createHistory(`create ${postIndex + 1}st post(${content.title}) prohibited`);
+      return undefined;
+    }
+    success = await this.browser.publishPost(postId)
+    if (!success) {
+      await this.service.createHistory(`create ${postIndex + 1}st post(${content.title}) limited`);
+      return undefined;
+    }
+    await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
+    return postId;
+  }
+
+  // bot action for posting
+  protected async doPost(): Promise<boolean> {
+    if (!this.settings.params)
+      return false
+    const { postContentIndex, contents } = this.settings.params;
+    // find the proper posting content
+    let postIndex = postContentIndex || 0;
+    if (postIndex >= contents.length)
+      postIndex = 0;
+    const content: IContent = contents[postIndex];
+    const media = content.media[0]
+    try {
+      // open content media
+      const mediaId = await this.getMedia(content.folder, media);
+      if (media.uuid != mediaId) {
+        await this.service.updateContentMedia(postIndex, mediaId);
+        await this.service.createHistory(`upload ${postIndex + 1}st media`);
+      }
+      // create a post
+      const postId = await this.createPublicPost(content, postIndex, mediaId)
+      const deleteIds = await this.removePosts();
+      if (deleteIds.length > 0) {
+        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
+      }
+      await this.service.updatePostSetting(true, postId, deleteIds);
+      return true;
+    } catch (error: any) {
+      this.logger.notifyError(error);
+      await this.service.updatePostSetting(true, undefined, []);
+      await this.service.createHistory(`create ${postIndex + 1}st post failed`);
+      return false;
+    }
+  }
+  // check if need test, true when testing bots
+  protected needTest(): boolean {
+    return false;
+  }
+
+  protected async doComment(): Promise<boolean> {
+    // get comment
+    try {
+      const params: ICommentParams = await this.service.updateCommentSetting();
+      if (params.comments.length === 0)
+        return true;
+      const explores = await this.browser.getExplores();
+      let success = false;
+      for (var explore of explores) {
+        if (explore.creator != this.config.alias && !params.block_users.includes(explore.creator)) {
+          success = await this.browser.followPost(explore);
+          if (success) {
+            const comment = this.pickup(params.comments);
+            await this.browser.commentPost(explore, comment);
+            await this.service.createHistory(`comment ${explore.creator}'s post`);
+            break;
+          }
+        }
+      }
+      return true;
+    } catch (error: any) {
+      this.logger.notifyError(error);
+      await this.service.createHistory(`comment post failed`);
+      return false;
+    }
+  }
+
+  protected async doCalibrate(): Promise<boolean> {
+    try {
+      const revenue = await this.getMonthlyRevenue();
+      const available = await this.service.checkBalance(revenue);
+      if (!available)
+        await this.service.createHistory(`bot closed due to no balance`);
+      return available;
+    } catch (error: any) {
+      this.logger.notifyError(error);
+      this.logger.warn(`check balance failed`);
+      return false;
+    }
+  }
+
+  private async getMonthlyRevenue(): Promise<number> {
+    const revenues = await this.browser.getDetailedRevenue();
+    const monthlyRevenues = revenues.filter(item => moment().diff(moment(item.date), "days") <= 30)
+    let revenue = 0
+    for (let item of monthlyRevenues) {
+      revenue += (item.message_revenue + item.post_revenue + item.referral_revenue + item.subscription_revenue + item.tip_revenue)
+    }
+    return revenue * 1.08;
+  }
+
+  private async getUnreadMessages(): Promise<IChatMessage[]> {
+    const chats = await this.browser.getChats();
+    const unreadChats = chats.filter(item => item.unread_message_count > 0 && item.message.received);
+    return unreadChats.map(item => ({ user: item.custom_chat_name, message: item.message.content, time: new Date(item.message.datetime) }))
+  }
+
+  private async checkPublishedSchedules(schedules: ISchedulePost[]): Promise<IScheduleResult[]> {
+    const postIds = await this.browser.getSelfPosts();
+    const schedulePostIds = schedules.filter(element => element.post != undefined).map(element => element.post);
+    if (schedulePostIds.length == 0) {
+      this.logger.info(`no published posts among ${postIds.length} posts`);
+      return []
+    }
+    const publishedPosts = postIds.filter(postId => schedulePostIds.includes(postId));
+    const results = publishedPosts.map(postId => {
+      const schedule = schedules.find(element => element.post == postId)
+      return ({ id: schedule?._id, post: schedule?.post, status: ScheduleStatus.FINISHED });
+    })
+    this.logger.info(`${results.length} published posts among ${postIds.length} posts`);
+    return results;
+  }
+
+  private async publishSchedule(post: ISchedulePost): Promise<void> {
+    try {
+      let success;
+      const mediaId = await this.getMedia(post.schedule.folder, post.schedule.media);
+      this.logger.info(`upload media for schedule post(${post.schedule.title})`);
+      const postId = await this.browser.createEmptyPost(mediaId);
+      this.logger.info(`create schedule post(${postId})`);
+      success = await this.browser.setPostTitle(postId, post.schedule.title, post.schedule.tags);
+      if (!success) {
+        await this.service.createHistory(`create scheduled post(${post.schedule.title}) prohibited`);
+        await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.FAILED, reason: "prohibited" });
+        return;
+      }
+      this.logger.info(`set post title(${post.schedule.title})`);
+      await this.browser.setPostPrice(postId, post.schedule.type, post.schedule.price);
+      this.logger.info(`set post price`);
+      success = await this.browser.schedulePost(postId, new Date(post.schedule.scheduledAt));
+      if (!success) {
+        await this.service.createHistory(`create scheduled post(${post.schedule.title}) prohibited`);
+        await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.FAILED, reason: "rate limited" });
+        return;
+      }
+      await this.service.createHistory(`create scheduled post(${postId}, ${post.schedule.title})`);
+      await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
+    } catch (error) {
+      this.logger.notifyError(error);
+      await this.service.createHistory(`create scheduled post(${post.schedule.title}) failed`);
+      await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
+    }
+  }
+
+  protected async doSchedule(): Promise<boolean> {
+    try {
+      let results: IScheduleResult[] = [];
+      // update next schedule time and get schedule list
+      const schedules = await this.service.updateScheduleSetting();
+      const waitingSchedules = schedules.filter(schedule => schedule.status == ScheduleStatus.WAITING);
+      const scheduledSchedules = schedules.filter(schedule => schedule.status == ScheduleStatus.SCHEDULED);
+      this.logger.info(`waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`);
+      // check published schedules
+      if (scheduledSchedules.length > 0)
+        results = await this.checkPublishedSchedules(scheduledSchedules);
+      // update schedules status
+      if (results.length > 0) {
+        await this.service.updateScheduleResults(results);
+        this.logger.info(`update ${results.length} scheduled posts`)
+      }
+      // schedule waiting schedules
+      let count = 0;
+      for (var schedule of waitingSchedules) {
+        await this.publishSchedule(schedule);
+        count += 1;
+        if (count >= 2)
+          break;
+      }
+      return true;
+    } catch (error) {
+      this.logger.notifyError(error);
+      return false;
+    }
+  }
+
+  protected async doStory(): Promise<boolean> {
+    const contents = this.settings.params?.contents || []
+    let storyIndex = this.settings.params?.storyIndex || 0;
+    const storyMaxCount = this.settings.params?.storyMaxCount || DEFAULT_STORY_MAX_COUNT;
+    try {
+      const stories = await this.browser.getSelfStories();
+      this.logger.info(`stories : ${stories.length} : ${storyMaxCount}`)
+      let countDeleted = 0
+      while (stories.length >= storyMaxCount) {
+        const storyDeleting = stories.shift();
+        if (storyDeleting) {
+          await this.browser.deleteStory(storyDeleting);
+          this.logger.info(`delete a story(${storyDeleting})`)
+          countDeleted = 0;
+        }
+      }
+      if (countDeleted > 0) {
+        await this.service.createHistory(`delete ${countDeleted} old stories`);
+      }
+      // find next story content
+      if (storyIndex >= contents.length)
+        storyIndex = 0;
+      let index = (storyIndex + 1) % contents.length;
+      let content;
+      while (index != storyIndex) {
+        const contentChecked = contents[index];
+        if (contentChecked.f2fStoryType && contentChecked.f2fStoryType > F2FStoryType.NONE) {
+          content = contents[index]
+          storyIndex = index
+          break;
+        }
+        index = (index + 1) % contents.length;
+      }
+      if (!content) {
+        this.logger.info(`there is no content for story`);
+        await this.service.updateStorySetting(storyIndex)
+        return true
+      }
+      const media: IMedia = content.media[0];
+      const mediaId = await this.getMedia(content.folder, media);
+      if (media.uuid != mediaId) {
+        await this.service.updateContentMedia(storyIndex, mediaId);
+        await this.service.createHistory(`upload ${storyIndex + 1}st media(${media.name})`);
+      }
+      // create story
+      const storyId = await this.browser.createStory(mediaId, content.f2fStoryType || F2FStoryType.PUBLIC);
+      await this.service.createHistory(`create a story(${storyId}) with ${storyIndex + 1}th content`);
+      await this.service.updateStorySetting(storyIndex)
+      return true;
+    } catch (error) {
+      await this.service.createHistory(`create a story failed with ${storyIndex + 1}th content`);
+      await this.service.updateStorySetting(storyIndex)
+      this.logger.notifyError(error);
+      return false;
+    }
+  }
+
+  public async doChat(): Promise<boolean> {
+    try {
+      let messages: IChatMessage[] = [];
+      await this.service.updateChatSetting();
+      const chats = await this.browser.getChats();
+      const unreadChats = chats.filter(chat => chat.unread_message_count > 0);
+      if (unreadChats.length == 0)
+        return true;
+      this.logger.info(`find ${unreadChats.length} unread chats`);
+      for (var chat of unreadChats) {
+        const message = chat.message;
+        if (message.received && !message.read && message.message_type == "text") {
+          messages.push({
+            user: chat.custom_chat_name || chat.title,
+            message: message.content,
+            time: new Date(message.datetime)
+          })
+        }
+      }
+      if (messages.length > 0) {
+        this.logger.info(`find ${messages.length} unread messages`);
+        await this.sendChatNotification(messages);
+      }
+      return true
+    } catch (error) {
+      this.logger.notifyError(error);
+      return true;
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+    "compact": true,
+    "controlFlowFlattening": true,
+    "deadCodeInjection": true,
+    "debugProtection": true,
+    "stringArray": true,
+    "stringArrayEncoding": [
+        "base64"
+    ],
+    "stringArrayThreshold": 0.75
+}

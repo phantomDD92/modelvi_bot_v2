@@ -1,0 +1,45 @@
+{
+  "name": "modelvi_bot",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "ts-node src/bot.ts",
+    "console": "ts-node src/console.ts",
+    "test": "ts-node src/test.ts",
+    "compile": "tsc",
+    "obfuscate": "javascript-obfuscator compile --output dist --config obfuscator-config.json",
+    "build": "tsc",
+    "dev": "ts-node src/main.ts",
+    "clean": "rimraf compile dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
+    "@types/node": "^22.5.4",
+    "@types/speakeasy": "^2.0.10",
+    "javascript-obfuscator": "^4.1.1",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2"
+  },
+  "dependencies": {
+    "2captcha-ts": "^2.3.6",
+    "axios": "^1.7.7",
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "crypto-js": "^4.2.0",
+    "date-fns-tz": "^3.2.0",
+    "dotenv": "^16.4.5",
+    "imapflow": "^1.0.189",
+    "moment": "^2.30.1",
+    "node-2fa": "^2.0.3",
+    "playwright": "^1.48.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-recaptcha": "^3.6.8",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "speakeasy": "^2.0.0"
+  }
+}
