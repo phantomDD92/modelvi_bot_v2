@@ -1,9 +1,10 @@
-import { BotError } from "../utils/error";
+import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { POST_PROHIBITED, PostType } from "../types/constant";
 import { IAccountID, IAccountSettings } from "../types/interface";
 import { IMymFansMedia, IMymFansPost } from "../types/mymfans";
 import { BaseBrowser } from "./base-browser";
 import moment from "moment";
+import { HttpStatusCode } from "axios";
 
 export class MymFansBrowser extends BaseBrowser {
 
@@ -21,7 +22,15 @@ export class MymFansBrowser extends BaseBrowser {
   }
 
   public async home(): Promise<void> {
-    await this.page.goto("https://mym.fans/", { waitUntil: "domcontentloaded", timeout: 120000 });
+    try {
+      await this.page.goto("https://mym.fans/", { waitUntil: "domcontentloaded", timeout: 120000 });
+    } catch (error: any) {
+      throw new ProxyError("invalid proxy", {
+        where: "MymFansBrowser::home",
+        error: error.message,
+        stack: error.stack,
+      })
+    }
   }
 
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
@@ -38,7 +47,7 @@ export class MymFansBrowser extends BaseBrowser {
       await this.page.getByRole('button', { name: 'Login', exact: true }).click();
       const profileResp = await profilePromise;
       if (profileResp.status() != 200) {
-        throw new BotError("wrong credentials", {
+        throw new AuthError("wrong credentials", {
           where: "MymFansBrowser::login",
           method: "GET",
           endpoint: "https://api.mym.fans/creators/me",
@@ -61,7 +70,6 @@ export class MymFansBrowser extends BaseBrowser {
         stack: error.stack
       })
     }
-
   }
 
   private async closeAdvertisementDialog() {
@@ -120,7 +128,7 @@ export class MymFansBrowser extends BaseBrowser {
       if (error instanceof BotError)
         throw error;
       const isMediaError = await this.page.locator("p[data-testid='field-error-media']").count()
-      if (isMediaError) 
+      if (isMediaError)
         return ({
           post: POST_PROHIBITED
         });
@@ -146,14 +154,20 @@ export class MymFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: params
       });
-      if (!resp.ok()) throw new BotError("find media failed", {
-        where: "MymFansBrowser::createPublicPostWithMediaId",
-        method: "POST",
-        endpoint: "https://api.mym.fans/posts",
-        params,
-        status: resp.statusText(),
-        response: await resp.text(),
-      });
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MymFansBrowser::createPublicPostWithMediaId",
+          });
+        throw new BotError("find media failed", {
+          where: "MymFansBrowser::createPublicPostWithMediaId",
+          method: "POST",
+          endpoint: "https://api.mym.fans/posts",
+          params,
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
       const respData = await resp.json();
       return respData.id;
     } catch (error: any) {
@@ -238,14 +252,20 @@ export class MymFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: params
       });
-      if (!resp.ok()) throw new BotError("find media failed", {
-        where: "MymFansBrowser::schedulePostWithMediaId",
-        method: "POST",
-        endpoint: "https://api.mym.fans/posts",
-        params,
-        status: resp.statusText(),
-        response: await resp.text(),
-      });
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MymFansBrowser::schedulePostWithMediaId",
+          });
+        throw new BotError("find media failed", {
+          where: "MymFansBrowser::schedulePostWithMediaId",
+          method: "POST",
+          endpoint: "https://api.mym.fans/posts",
+          params,
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
       const respData = await resp.json();
       return respData.id;
     } catch (error: any) {
@@ -259,21 +279,26 @@ export class MymFansBrowser extends BaseBrowser {
     }
   }
 
-
   public async findMedia(mediaId: string): Promise<string | undefined> {
     try {
       const resp = await this.page.request.get("https://api.mym.fans/creators/medias", {
         headers: this.headers,
         params: { perPage: 20 }
       });
-      if (!resp.ok()) throw new BotError("find media failed", {
-        where: "MymFansBrowser::findMedia",
-        method: "GET",
-        endpoint: "https://api.mym.fans/creators/medias",
-        params: { perPage: 20 },
-        status: resp.statusText(),
-        response: await resp.text(),
-      });
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MymFansBrowser::findMedia",
+          });
+        throw new BotError("find media failed", {
+          where: "MymFansBrowser::findMedia",
+          method: "GET",
+          endpoint: "https://api.mym.fans/creators/medias",
+          params: { perPage: 20 },
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
       const respData = await resp.json();
       const mediaCount = respData.pagination?.itemsTotal || 0;
       if (mediaCount > 20) throw new BotError("need updating");
@@ -297,14 +322,20 @@ export class MymFansBrowser extends BaseBrowser {
         headers: this.headers,
         params: { perPage: 20 }
       });
-      if (!resp.ok()) throw new BotError("get posts failed", {
-        where: "MymFansBrowser::getPosts",
-        method: "GET",
-        endpoint: "https://api.mym.fans/creators/posts",
-        params: { perPage: 20 },
-        status: resp.statusText(),
-        response: await resp.text(),
-      });
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MymFansBrowser::getPosts",
+          });
+        throw new BotError("get posts failed", {
+          where: "MymFansBrowser::getPosts",
+          method: "GET",
+          endpoint: "https://api.mym.fans/creators/posts",
+          params: { perPage: 20 },
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
       const respData = await resp.json();
       const posts: IMymFansPost[] = respData.posts || [];
       return posts.map(post => post.id);
@@ -325,13 +356,19 @@ export class MymFansBrowser extends BaseBrowser {
       const resp = await this.page.request.delete(`https://api.mym.fans/posts/${postId}`, {
         headers: this.headers
       });
-      if (!resp.ok()) throw new BotError("delete media failed", {
-        where: "MymFansBrowser::deletePost",
-        method: "GET",
-        endpoint: "https://api.mym.fans/creators/posts",
-        status: resp.statusText(),
-        response: await resp.text(),
-      });
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MymFansBrowser::deletePost",
+          });
+        throw new BotError("delete media failed", {
+          where: "MymFansBrowser::deletePost",
+          method: "GET",
+          endpoint: "https://api.mym.fans/creators/posts",
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;

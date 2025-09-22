@@ -4,8 +4,8 @@ import { PostApiService } from "./post-service";
 
 export class FakePostService extends PostApiService {
 
-    public async init(): Promise<boolean> {
-        return true;
+    public async init(): Promise<void> {
+    
     }
 
     public async createHistory(action: string): Promise<void> {

@@ -12,7 +12,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import RecaptchaPlugin from "puppeteer-extra-plugin-recaptcha";
 import { Logger } from "../utils/logger";
 import { Solver } from "2captcha-ts";
-import { BotError } from "../utils/error";
+import { BotError, ProxyError } from "../utils/error";
 import { Platform } from '../types/constant';
 import axios from 'axios';
 
@@ -92,9 +92,10 @@ export abstract class BaseBrowser {
   // check proxy for browser
   public async checkProxy(): Promise<void> {
     try {
+      // go to google home page
       await this.page.goto("https://www.google.com", { waitUntil: "domcontentloaded" });
     } catch (error: any) {
-      throw new BotError("invalid proxy", {
+      throw new ProxyError("invalid proxy", {
         where: 'BaseBrowser::checkProxy',
         error: error.message,
         stack: error.stack,

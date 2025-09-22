@@ -175,3 +175,16 @@ export interface IChatMessage {
   message: string,
   time: Date,
 }
+
+export interface ILog {
+  success: boolean,
+  action: number,
+  message: string,
+  disabled?: boolean,
+  notified?: boolean,
+  error?: string,
+  target?: string,
+  targets?: string[],
+  description?: string,
+  time?: Date,
+}

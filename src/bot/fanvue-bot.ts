@@ -30,17 +30,6 @@ export class FanvueBot extends PostBot {
   // init account for f2f bot
   protected async initAccount(): Promise<void> {
     await super.initAccount();
-    // // check account proxy
-    // // const proxyAddr = await this.service.pickProxy();
-    // const proxyAddr = "cb3ac8e713:zxHGsQ21@195.39.214.75:4444"
-    // const proxy = this.parseProxy(proxyAddr);
-    // if (!proxy) {
-    //   throw new BotError("invalid proxy", {
-    //     where: "FanslyBot::initAccount",
-    //     error: "there is no proxy for the account"
-    //   });
-    // }
-    // this.proxy = proxy;
     this.logger.info("init account success");
   }
 
