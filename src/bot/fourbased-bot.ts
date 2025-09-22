@@ -5,7 +5,7 @@ import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from "..
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
 import { BotError, SessionTimeoutError } from '../utils/error';
-import { DEFAULT_LIVING_POSTS, ScheduleStatus } from "../types/constant";
+import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from "../types/constant";
 
 export class FourBasedBot extends PostBot {
   protected browser!: FourBasedBrowser;
@@ -39,9 +39,11 @@ export class FourBasedBot extends PostBot {
       const available = await this.service.checkBalance(revenue)
       return available;
     } catch (error) {
+      if (error instanceof SessionTimeoutError) {
+        await this.browser.refreshSession();
+        return false;
+      }
       this.logger.notifyError(error);
-      if (error instanceof SessionTimeoutError)
-        throw error;
       return false;
     }
   }
@@ -65,8 +67,10 @@ export class FourBasedBot extends PostBot {
       }
       return deleteIds;
     } catch (error: any) {
-      if (error instanceof SessionTimeoutError)
-        throw error;
+      if (error instanceof SessionTimeoutError) {
+        await this.browser.refreshSession();
+        return deleteIds;
+      }
       this.logger.notifyError(error)
       return deleteIds
     }
@@ -93,7 +97,7 @@ export class FourBasedBot extends PostBot {
   protected async doPost(): Promise<boolean> {
     if (!this.settings.params?.contents || this.settings.params.contents.length == 0) {
       this.logger.info(`account has no content to post`);
-      await this.service.updatePostSetting(true, undefined, []);
+      await this.service.updatePostResult(PostResultType.SUCCESS, undefined, []);
       return true;
     }
     const contents = this.settings.params.contents;
@@ -102,29 +106,36 @@ export class FourBasedBot extends PostBot {
       postIndex = 0;
     const content: IContent = contents[postIndex];
     const media = content.media[0];
+    let deleteIds: string[] = [];
+    let postId;
     try {
       let folderName = content.folder;
       if (!folderName || folderName == "")
         folderName = "Posts";
       let mediaId = await this.getMedia(folderName, media)
       if (mediaId != media.uuid) {
-        await this.service.createHistory(`upload ${postIndex + 1}st media(${mediaId})`);
+        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media`, target: mediaId, description: media.name });
+        // await this.service.createHistory(`upload ${postIndex + 1}st media(${mediaId})`);
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      const postId = await this.browser.schedulePost(moment().add(1, "minute").toDate(), content.title, mediaId);
+      postId = await this.browser.schedulePost(moment().add(1, "minute").toDate(), content.title, mediaId);
       if (postId) {
-        await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post`, target: postId, description: content.title });
+        // await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
       }
-      const deleteIds = await this.deleteOldPosts();
+      deleteIds = await this.deleteOldPosts();
       if (deleteIds.length > 0) {
-        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
       }
-      this.service.updatePostSetting(true, postId, deleteIds);
+      this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.updatePostSetting(true, undefined, []);
-      await this.service.createHistory(`create ${postIndex + 1}st post(${content.title}) failed`);
+      await this.service.updatePostResult(PostResultType.FAILED, postId, deleteIds)
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
+      if (error instanceof SessionTimeoutError) {
+        await this.browser.refreshSession();
+      }
       return false;
     }
   }
@@ -153,7 +164,7 @@ export class FourBasedBot extends PostBot {
       const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, mediaId, schedule.type, schedule.price)
       await this.service.createHistory(`create scheduled post(${postId}, ${schedule.title})`);
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
-    } catch (error) {
+    } catch (error: any) {
       this.logger.notifyError(error);
       await this.service.createHistory(`create scheduled post(${schedule.title}) failed`);
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
@@ -185,8 +196,11 @@ export class FourBasedBot extends PostBot {
           break;
       }
       return true;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.notifyError(error);
+      if (error instanceof SessionTimeoutError) {
+        await this.browser.refreshSession();
+      }
       return false;
     }
   }
@@ -200,8 +214,11 @@ export class FourBasedBot extends PostBot {
         await this.sendChatNotification(messages);
       }
       return true;
-    } catch (error) {
+    } catch (error: any) {
       this.logger.notifyError(error);
+      if (error instanceof SessionTimeoutError) {
+        await this.browser.refreshSession();
+      }
       return false;
     }
   }

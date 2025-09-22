@@ -1,5 +1,5 @@
 import moment from "moment";
-import { BotError, ProxyError, SessionTimeoutError } from "../utils/error";
+import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { IFourBasedChat, IFourBasedPost, IFourBasedProfile, IFourBasedUser, IFourBasedVault } from "../types/fourbased";
 import { IAccountID, IAccountSettings, IChatMessage } from "../types/interface";
 import { BaseBrowser } from "./base-browser";
@@ -36,25 +36,27 @@ export class FourBasedBrowser extends BaseBrowser {
       }, { timeout: 180000 });
 
       await this.page.locator("auth-login ion-button.submit-button").click();
-      const [loginResp, baseResp] = await Promise.all([loginPromise, basePromise]);
-      if (!loginResp.ok()) throw new BotError("wrong credentials", {
-        where: "FourBasedBrowser::login",
-        method: "POST",
-        endpoint: "https://rest.4based.com/api/1.0/auth/login",
-        params: loginResp.request().postDataJSON(),
-        status: loginResp.statusText(),
-        response: await loginResp.json()
-      })
+      const loginResp = await loginPromise;
+      if (!loginResp.ok())
+        throw new AuthError("wrong credentials", {
+          where: "FourBasedBrowser::login",
+          method: "POST",
+          endpoint: "https://rest.4based.com/api/1.0/auth/login",
+          params: loginResp.request().postDataJSON(),
+          status: loginResp.statusText(),
+          response: await loginResp.json()
+        });
       const loginData = await loginResp.json();
       this.profile = loginData.user;
-      // const baseResp = await basePromise;
-      if (!baseResp.ok()) throw new BotError("login failed", {
-        where: "FourBasedBrowser::login",
-        method: "GET",
-        endpoint: "https://rest.4based.com/api/1.0/base",
-        status: baseResp.statusText(),
-        response: await baseResp.json()
-      });
+      const baseResp = await basePromise;
+      if (!baseResp.ok())
+        throw new BotError("login failed", {
+          where: "FourBasedBrowser::login",
+          method: "GET",
+          endpoint: "https://rest.4based.com/api/1.0/base",
+          status: baseResp.statusText(),
+          response: await baseResp.json()
+        });
       this.headers = await baseResp.request().allHeaders();
       return { alias: this.profile.name, id: this.profile._id };
     } catch (error: any) {
@@ -66,7 +68,6 @@ export class FourBasedBrowser extends BaseBrowser {
         stack: error.stack,
       });
     }
-
   }
 
   // public async getProfile(): Promise<void> {

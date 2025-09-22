@@ -197,7 +197,7 @@ export abstract class PostBot extends BaseBot {
   protected async doUpdate(): Promise<boolean> {
     try {
       const count = await this.service.updateContents();
-      await this.service.createHistory(`update ${count} contents`);
+      await this.service.createLog({ success: true, action: ActionType.UPDATE, message: `update ${count} contents` })
       return true;
     } catch (error: any) {
       this.logger.error(error);
