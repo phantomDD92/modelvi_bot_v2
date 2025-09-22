@@ -1,8 +1,7 @@
 import axios from "axios";
-import { IAccountID, IAccountSettings, IBotConfig, ICommentParams, ICommentUser, ISchedulePost, IScheduleResult } from "../types/interface";
+import { IAccountID, IAccountSettings, IBotConfig, ICommentParams, ICommentUser, ILog, ISchedulePost, IScheduleResult } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { ApiError, BotError } from "../utils/error";
-import { PostResultType } from "../types/constant";
 
 export class PostApiService {
   protected config: IBotConfig;
@@ -15,251 +14,107 @@ export class PostApiService {
   }
 
   // int api service 
-  public async init(): Promise<boolean> {
-    try {
-      // get bot api-key from server
-      const { token } = await this.postRequest(
-        `/platform/${this.config.platform}`,
-        { alias: Buffer.from(this.config.alias).toString('base64') }
-      );
-      this.token = token;
-      await this.logger.info("init service success");
-      return true;
-    } catch (error: any) {
-      console.error(error);
-      await this.logger.warn("init service failed");
-      return false;
-    }
+  public async init(): Promise<void> {
+    // get bot api-key from server
+    const { token } = await this.postRequest(
+      `/platform/${this.config.platform}`,
+      { alias: Buffer.from(this.config.alias).toString('base64') }
+    );
+    this.token = token;
+    await this.logger.info("init service success");
   }
 
   public async getTeams(): Promise<string[]> {
-    try {
-      const { accounts } = await this.getRequest(`/platform/${this.config.platform}`);
-      return accounts;
-    } catch (error: any) {
-      throw new BotError("get teams failed", {
-        where: "BaseService::getTeams",
-        method: "GET",
-        path: `/platform/${this.config.platform}`,
-        error: error.message,
-        stack: error.stack,
-      })
-    }
+    const payload = await this.getRequest(`/platform/${this.config.platform}`);
+    return payload.accounts || [];
   }
 
   public async checkBalance(revenue: number): Promise<boolean> {
-    try {
-      const { available } = await this.postRequest(`/balance`, { revenue });
-      return available;
-    } catch (error: any) {
-      throw new BotError("check balance failed");
-    }
+    const payload = await this.postRequest(`/balance`, { revenue });
+    return payload.available;
   }
 
-
   public async changeProxy(): Promise<void> {
-    try {
-      await this.putRequest(`/proxy`);
-    } catch (error: any) {
-      throw new BotError("change proxy failed", {
-        where: "BaseService::changeProxy",
-        path: '/proxy',
-        error: error.message,
-        stack: error.stack,
-      })
-    }
+    await this.putRequest(`/proxy`);
   }
 
   public async getAccountSettings(): Promise<IAccountSettings> {
-    try {
-      const { account } = await this.getRequest(`/account`);
-      return account;
-    } catch (error: any) {
-      console.error(error)
-      throw new BotError("invalid account", {
-        where: "BaseService::getAccountSettings",
-        path: '/account',
-        error: error.message,
-        stack: error.stack,
-      })
-    }
+    const payload = await this.getRequest(`/account`);
+    return payload.account;
   }
 
   public async updateContents(): Promise<void> {
-    try {
-      const { count } = await this.postRequest(`/account`, { subject: "update_contents" });
-      return count;
-    } catch (error: any) {
-      throw new BotError("update contents failed", {
-        where: "BaseService::updateContents",
-        path: '/account',
-        error: error.message,
-      })
-    }
+    const payload = await this.postRequest(`/account`, { subject: "update_contents" });
+    return payload.count || 0;
   }
 
   public async updateContentMedia(contentIndex: number, uuid: string): Promise<void> {
-    try {
-      await this.postRequest(`/account`, { subject: 'content_media', id: contentIndex, uuid });
-    } catch (error: any) {
-      throw new BotError("update content failed", {
-        where: "BaseService::updateContent",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    await this.postRequest(`/account`, { subject: 'content_media', id: contentIndex, uuid });
   }
 
   public async updatePostSetting(next: boolean = false, postId: string | undefined = undefined, deleteIds: string[]): Promise<string[]> {
-    try {
-      const payload = await this.postRequest(`/account`, { subject: 'post_setting', postId, next, deleteIds });
-      return payload.deleteIds || []
-    } catch (error: any) {
-      throw new BotError("update post setting failed", {
-        where: "BaseService::updatePostSetting",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    const payload = await this.postRequest(`/account`, { subject: 'post_setting', postId, next, deleteIds });
+    return payload.deleteIds || []
   }
 
   public async updatePostResult(result: number, postId: string | undefined = undefined, deleteIds: string[] = [], nextTimeLimit: Date | undefined = undefined): Promise<void> {
-    try {
-      await this.postRequest(`/account`, { subject: 'post_result', result, postId, deleteIds, nextTimeLimit });
-    } catch (error: any) {
-      throw new BotError("update posting result failed", {
-        where: "BaseService::updatePostResult",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    await this.postRequest(`/account`, { subject: 'post_result', result, postId, deleteIds, nextTimeLimit });
+
   }
 
 
   public async updateId(idInfo: IAccountID): Promise<void> {
-    try {
-      await this.postRequest(`/account`, { subject: 'update_id', alias: idInfo.alias, identifier: idInfo.id });
-      return;
-    } catch (error: any) {
-      throw new BotError("update id failed", {
-        where: "BaseService::updateId",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    await this.postRequest(`/account`, { subject: 'update_id', alias: idInfo.alias, identifier: idInfo.id });
+
   }
 
   public async updateStorySetting(index: number): Promise<void> {
-    try {
-      await this.postRequest(`/account`, { subject: 'story_setting', index });
-    } catch (error: any) {
-      throw new BotError("update story setting failed", {
-        where: "BaseService::updateStorySetting",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    await this.postRequest(`/account`, { subject: 'story_setting', index });
+
   }
 
   public async updateChatSetting(): Promise<void> {
-    try {
-      await this.postRequest(`/account`, { subject: 'chat_setting' });
-    } catch (error: any) {
-      throw new BotError("update chat setting failed", {
-        where: "BaseService::updateChatSetting",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    await this.postRequest(`/account`, { subject: 'chat_setting' });
   }
 
   public async updateScheduleSetting(): Promise<ISchedulePost[]> {
-    try {
-      const payload = await this.postRequest(`/account`, { subject: 'schedule_setting' });
-      return payload?.schedules || [];
-    } catch (error: any) {
-      console.error(error)
-      throw new BotError("update schedule setting failed", {
-        where: "BaseService::updateScheduleSetting",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    const payload = await this.postRequest(`/account`, { subject: 'schedule_setting' });
+    return payload?.schedules || [];
   }
 
   public async updateScheduleResults(results: IScheduleResult[]): Promise<void> {
-    try {
-      await this.postRequest(`/account`, { subject: 'schedule_results', results });
-    } catch (error: any) {
-      throw new BotError("update schedule results failed", {
-        where: "BaseService::updateScheduleResults",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    await this.postRequest(`/account`, { subject: 'schedule_results', results });
+
   }
 
   public async updateScheduleResult(result: IScheduleResult): Promise<void> {
-    try {
-      await this.postRequest(`/account`, { subject: 'schedule_result', result });
-    } catch (error: any) {
-      throw new BotError("update schedule results failed", {
-        where: "BaseService::updateScheduleResults",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    await this.postRequest(`/account`, { subject: 'schedule_result', result });
+
   }
 
   public async updateCommentSetting(): Promise<ICommentParams> {
-    try {
-      const { comments, users } = await this.postRequest(`/account`, { subject: 'comment_setting' });
-      return ({
-        comments,
-        block_users: users.filter((user: ICommentUser) => user.status === "block").map((user: ICommentUser) => user.alias)
-      });
-    } catch (error: any) {
-      throw new BotError("update comment setting failed", {
-        where: "BaseService::updateCommentSetting",
-        path: '/account',
-        error: error.message,
-      });
-    }
+    const { comments, users } = await this.postRequest(`/account`, { subject: 'comment_setting' });
+    return ({
+      comments: comments || [],
+      block_users: (users || []).filter((user: ICommentUser) => user.status === "block").map((user: ICommentUser) => user.alias)
+    });
   }
 
-  public async createLog(success: boolean, action: number, log: string, extra: any = {}): Promise<void> {
-    try {
-      this.logger.info(log);
-      await this.postRequest(`/log`, { action, success, log, extra });
-    } catch (error: any) {
-    }
+  public async createLog(log: ILog): Promise<void> {
+    this.logger.info(log.message);
+    await this.postRequest(`/log`, log);
   }
 
   public async createHistory(action: string): Promise<void> {
-    try {
-      this.logger.info(action);
-      await this.postRequest(`/history`, { action });
-    } catch (error: any) {
-    }
+    await this.postRequest(`/history`, { action });
   }
 
   public async setLastError(message: string, disabled: boolean = false): Promise<void> {
-    try {
-      await this.putRequest(`/history`, { action: message, disabled });
-    } catch (error: any) {
-    }
+    await this.putRequest(`/history`, { action: message, disabled });
   }
 
   public async clearError(): Promise<void> {
-    try {
-      await this.deleteRequest(`/history`);
-    } catch (error: any) {
-      throw new BotError("clear error failed", {
-        where: "BaseService::clearError",
-        path: '/history',
-        error: error.message,
-      });
-    }
+    await this.deleteRequest(`/history`);
   }
 
   protected async getRequest(path: string, params: any = undefined) {
@@ -272,7 +127,7 @@ export class PostApiService {
         });
       const { success, message, payload } = resp.data;
       if (!success)
-        throw new BotError("Bot api bad response", {
+        throw new ApiError("bad api response", {
           method: "GET",
           path: path,
           message: message,
@@ -283,11 +138,11 @@ export class PostApiService {
       if (error instanceof BotError) {
         throw error;
       } else if (error.response?.status === 401) {
-        throw new BotError("permission denied", { path });
+        throw new ApiError("bad api permission", { method: "GET", path: path, });
       } else if (error.response?.status === 404) {
-        throw new ApiError("invalid api", path);
+        throw new ApiError("bad api request", { method: "GET", path: path, });
       } else {
-        throw new ApiError("server connection failed", path);
+        throw new ApiError("internal api failure", { method: "GET", path: path, });
       }
     }
   }
@@ -306,14 +161,14 @@ export class PostApiService {
         throw new ApiError(message, path);
       return payload;
     } catch (error: any) {
-      if (error instanceof ApiError) {
+      if (error instanceof BotError) {
         throw error;
       } else if (error.response?.status === 401) {
-        throw new ApiError("permission denied", path);
+        throw new ApiError("bad api permission", { method: "PUT", path: path, });
       } else if (error.response?.status === 404) {
-        throw new ApiError("invalid api", path);
+        throw new ApiError("bad api request", { method: "PUT", path: path, });
       } else {
-        throw new ApiError("server connection failed", path);
+        throw new ApiError("internal api failure", { method: "PUT", path: path, });
       }
     }
   }
@@ -332,15 +187,14 @@ export class PostApiService {
         throw new ApiError(message, path);
       return payload;
     } catch (error: any) {
-      console.error(error);
-      if (error instanceof ApiError) {
+      if (error instanceof BotError) {
         throw error;
       } else if (error.response?.status === 401) {
-        throw new ApiError("permission denied", path);
+        throw new ApiError("bad api permission", { method: "POST", path: path, });
       } else if (error.response?.status === 404) {
-        throw new ApiError("invalid api", path);
+        throw new ApiError("bad api request", { method: "POST", path: path, });
       } else {
-        throw new ApiError("server connection failed", path);
+        throw new ApiError("internal api failure", { method: "POST", path: path, });
       }
     }
   }
@@ -359,17 +213,16 @@ export class PostApiService {
         throw new ApiError(message, path);
       return payload;
     } catch (error: any) {
-      if (error instanceof ApiError) {
+      if (error instanceof BotError) {
         throw error;
       } else if (error.response?.status === 401) {
-        throw new ApiError("permission denied", path);
+        throw new ApiError("bad api permission", { method: "DELETE", path: path, });
       } else if (error.response?.status === 404) {
-        throw new ApiError("invalid api", path);
+        throw new ApiError("bad api request", { method: "DELETE", path: path, });
       } else {
-        throw new ApiError("server connection failed", path);
+        throw new ApiError("internal api failure", { method: "DELETE", path: path, });
       }
     }
   }
-
 }
 

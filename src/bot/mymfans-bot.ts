@@ -5,7 +5,7 @@ import { IBotConfig, IContent } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
 import { ActionType, DEFAULT_LIVING_POSTS, POST_PROHIBITED, PostResultType } from "../types/constant";
-import { BotError } from "../utils/error";
+import { BotError, SessionTimeoutError } from "../utils/error";
 
 export class MymFansBot extends PostBot {
   protected browser!: MymFansBrowser;
@@ -32,7 +32,6 @@ export class MymFansBot extends PostBot {
     await super.initAccount();
     this.logger.info("init account success");
   }
-
 
   protected async doCalibrate(): Promise<boolean> {
     try {
@@ -64,8 +63,10 @@ export class MymFansBot extends PostBot {
       }
       return deleteIds;
     } catch (error: any) {
+      if (error instanceof SessionTimeoutError)
+        throw error;
       this.logger.notifyError(error)
-      return []
+      return [];
     }
   }
 
@@ -84,7 +85,12 @@ export class MymFansBot extends PostBot {
     try {
       deleteIds = await this.deleteOldPosts();
       if (deleteIds.length > 0) {
-        await this.service.createLog(true, ActionType.POST, `delete ${deleteIds.length} posts`, { targets: deleteIds })
+        await this.service.createLog({
+          success: true,
+          action: ActionType.POST,
+          message: `delete ${deleteIds.length} posts`,
+          targets: deleteIds,
+        });
       }
       let mediaId, postId;
       if (media.uuid) {
@@ -94,38 +100,49 @@ export class MymFansBot extends PostBot {
       }
       if (mediaId) {
         postId = await this.browser.createPublicPostWithMediaId(content.title, mediaId)
-        await this.service.createLog(true, ActionType.POST, `create ${postIndex + 1}st post`, { desc: content.title, target: postId });
+        await this.service.createLog({
+          success: true,
+          action: ActionType.POST,
+          message: `create ${postIndex + 1}st post`,
+          target: postId,
+          description: content.title,
+        });
         this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       } else {
         const mediaPath = await this.downloadFile(media.name)
         this.logger.info(`download ${postIndex + 1}st media.`)
         const { media: media1, post, scheduledAt } = await this.browser.createPublicPost(content.title, mediaPath);
         if (post == POST_PROHIBITED) {
-          await this.service.createLog(false, ActionType.POST, `skip ${postIndex + 1}st post `, { desc: content.title});
+          await this.service.createLog({ success: true, action: ActionType.POST, message: `skip ${postIndex + 1}st post`, description: content.title, });
           this.service.updatePostResult(PostResultType.PROHIBITED, undefined, deleteIds);
           return true;
         }
         mediaId = media1;
-        await this.service.createLog(true, ActionType.UPLOAD, `upload ${postIndex + 1}st media`, { desc: media.name, target: mediaId });
         await this.service.updateContentMedia(postIndex, mediaId);
         postId = post;
         if (scheduledAt) {
-          await this.service.createLog(true, ActionType.POST, `schedule ${postIndex + 1}st post at ${moment(scheduledAt).format("YYYY-MM-DD HH:mm")}`, { desc: content.title, target: postId });
+          await this.service.createLog({
+            success: true,
+            action: ActionType.POST,
+            message: `schedule ${postIndex + 1}st post`,
+            description: content.title,
+            target: postId,
+            time: new Date(scheduledAt),
+          });
           this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds, new Date(scheduledAt));
         } else {
-          await this.service.createLog(true, ActionType.POST, `create ${postIndex + 1}st post`, { desc: content.title, target: postId });
+          await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post`, description: content.title, target: postId, });
           this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
         }
       }
       return true;
     } catch (error: any) {
+      // if session timeout, restart bot
+      if (error instanceof SessionTimeoutError)
+        throw error;
       this.logger.notifyError(error);
       await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
-      await this.service.createLog(false, ActionType.POST, `create ${postIndex + 1}st post failed`, {
-        desc: content.title,
-        notifyNeeded: true,
-        notifyMessage: `failed to create public post of ${postIndex + 1}th content`,
-      });
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post`, description: content.title, notified: true });
       return false;
     }
   }
@@ -134,17 +151,18 @@ export class MymFansBot extends PostBot {
     try {
       return true;
     } catch (error: any) {
-      console.error(error);
+      if (error instanceof SessionTimeoutError)
+        throw error;
       return false;
     }
   }
 
 
   protected needTest(): boolean {
-    if (!this.tested) {
-      this.tested = true;
-      return true;
-    }
+    // if (!this.tested) {
+    //   this.tested = true;
+    //   return true;
+    // }
     return false;
   }
 }

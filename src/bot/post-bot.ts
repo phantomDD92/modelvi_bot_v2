@@ -9,11 +9,11 @@ import axios from "axios";
 import { BaseBrowser } from "../browser/base-browser";
 import { PostApiService } from "../services/post-service";
 import { IAccountSettings, IBotConfig, IChatMessage, IProxy } from "../types/interface";
-import { MAX_ERROR_COUNT } from "../types/constant";
+import { ActionType, MAX_ERROR_COUNT } from "../types/constant";
 import { Logger } from "../utils/logger";
 import { getPlatformName } from "../utils/helper";
 import { BaseBot } from './base-bot';
-import { BotError } from '../utils/error';
+import { AuthError, BotError, ProxyError } from '../utils/error';
 
 
 export abstract class PostBot extends BaseBot {
@@ -42,11 +42,16 @@ export abstract class PostBot extends BaseBot {
       await this.initAccount();
       await this.initBrowser();
       await this.initProxy();
-      await this.service.createHistory("bot started");
     } catch (error: any) {
-      await this.logger.notifyErrorAndWait(error)
-      this.logger.warn(`bot closed due to ${error instanceof BotError ? error.message : 'internal error'}`);
-      await this.service.setLastError(`${error instanceof BotError ? error.message : 'internal error'}`, true);
+      if (error instanceof ProxyError)
+        await this.service.changeProxy();
+      await this.logger.notifyErrorAndWait(error);
+      await this.service.createLog({
+        success: false,
+        action: ActionType.LOGIN,
+        message: `bot closed due to ${error.message}`,
+        error: error.message,
+      });
       throw error;
     }
   }
@@ -65,40 +70,30 @@ export abstract class PostBot extends BaseBot {
   protected async initAccount(): Promise<void> {
     await this.getAccount();
     if (!this.settings.proxy) {
-      await this.service.changeProxy();
-      throw new BotError("no proxy", {
-        where: "FanslyLikeBot::initAccount",
+      throw new ProxyError("no proxy", {
+        where: "PostBot::initAccount",
         error: "no proxy for the account",
       });
     }
     const proxy = this.parseProxy(this.settings.proxy);
     if (!proxy) {
-      await this.service.changeProxy();
-      throw new BotError("invalid proxy", {
-        where: "FanslyLikeBot::initAccount",
+      throw new ProxyError("invalid proxy", {
+        where: "PostBot::initAccount",
         error: "invalid proxy for the account"
       });
     }
     this.proxy = proxy;
+    await this.logger.info(`select proxy(${this.proxy.server})`)
   };
 
   // init proxy
   protected async initProxy(): Promise<void> {
-    try {
-      await this.browser.checkProxy();
-      await this.browser.home();
-      await this.logger.info(`select proxy(${this.proxy.server})`)
-    } catch (error) {
-      await this.logger.warn(`invalid proxy(${this.proxy.server})`)
-      await this.service.changeProxy();
-      throw error;
-    }
+    await this.browser.checkProxy();
+    await this.browser.home();
   }
 
   async start(): Promise<void> {
     try {
-      // open home page
-      // await this.browser.home()
       await this.browser.afterHome();
       const idInfo = await this.browser.login(this.settings);
       if (idInfo) {
@@ -107,18 +102,13 @@ export abstract class PostBot extends BaseBot {
         this.config.alias = idInfo.alias;
         this.settings.alias = idInfo.alias;
       }
-      await this.service.createHistory("login success");
+      await this.service.createLog({ success: true, action: ActionType.LOGIN, message: "login success" });
       await this.browser.afterLogin();
       await this.logger.info("start scheduling...")
       setTimeout(this.schedule.bind(this), 100);
     } catch (error: any) {
-      if (this.logger) {
-        this.logger.notifyError(error)
-        this.logger.warn(`bot closed due to ${error instanceof BotError ? error.message : 'internal error'}`);
-      }
-      if (this.service)
-        await this.service.setLastError(`${error instanceof BotError ? error.message : 'internal error'}`, true);
-      console.error(error);
+      this.logger.notifyError(error);
+      await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to ${error.message}`, disabled: error instanceof AuthError, error: error.message });
       throw error;
     }
   }

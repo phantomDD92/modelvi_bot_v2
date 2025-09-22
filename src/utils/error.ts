@@ -15,6 +15,14 @@ export class SessionTimeoutError extends BotError {
   }
 }
 
+export class AuthError extends BotError {
+  public reason: any;
+  constructor(message: string, reason: any = undefined) {
+    super(message, reason); // Call the parent constructor with the message
+    this.name = "AuthError";
+  }
+}
+
 export class ProxyError extends BotError {
   public reason: any;
   constructor(message: string, reason: any = undefined) {
@@ -23,12 +31,10 @@ export class ProxyError extends BotError {
   }
 }
 
-export class ApiError extends Error {
-  public path: string;
-  constructor(message: string, path: string) {
-    super(message); // Call the parent constructor with the message
+export class ApiError extends BotError {
+  constructor(message: string, reason: any = undefined) {
+    super(message, reason);  // Call the parent constructor with the message
     this.name = "ApiError"; // Set the error name
-    this.path = path
   }
 }
 

@@ -14,7 +14,7 @@ export class LikeApiService {
   }
 
   // int api service 
-  public async init(): Promise<boolean> {
+  public async init(): Promise<void> {
     try {
       // get bot api-key from server
       const { token } = await this.postRequest(
@@ -23,10 +23,10 @@ export class LikeApiService {
       );
       this.token = token;
       await this.logger.info("init service success");
-      return true;
+
     } catch (error: any) {
       await this.logger.warn("init service failed");
-      return false;
+      throw new error;
     }
   }
 
