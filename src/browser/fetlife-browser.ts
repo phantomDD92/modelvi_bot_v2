@@ -36,6 +36,7 @@ export class FetLifeBrowser extends BaseBrowser {
         if (msg.text().includes("intercepted-params:")) {
           const params = JSON.parse(msg.text().replace("intercepted-params:", ""));
           const code = await this.solveTurnstileCaptcha(params);
+          console.log("### solve result :", code)
           this.logger.info("solve captcha...")
           await this.page.evaluate((token) => {
             window.cfCallback?.(token);
@@ -72,7 +73,7 @@ export class FetLifeBrowser extends BaseBrowser {
       const homePromise = this.page.waitForResponse(response => {
         return response.url() === "https://fetlife.com/home" && response.request().method() === "POST"
       }, { timeout: 120000 });
-      await this.page.waitForURL("https://fetlife.com/home", { waitUntil: "domcontentloaded" });
+      await this.page.waitForURL("https://fetlife.com/home", { waitUntil: "domcontentloaded", timeout: 120000 });
       const homeResp = await homePromise;
       if (!homeResp.ok())
         throw new BotError("login failed", {
@@ -82,7 +83,7 @@ export class FetLifeBrowser extends BaseBrowser {
           response: await homeResp.text(),
         });
       this.headers = await homeResp.allHeaders()
-      await this.page.waitForURL("https://fetlife.com/home", { waitUntil: "domcontentloaded" });
+      await this.page.waitForURL("https://fetlife.com/home", { waitUntil: "load" });
       const user = await this.getUser()
       if (!user)
         return undefined
@@ -91,19 +92,19 @@ export class FetLifeBrowser extends BaseBrowser {
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
-      const flashTagCount = await this.page.locator("div#static-flash-container").count()
-      if (flashTagCount > 0) {
-        const flashText = await this.page.locator("div#static-flash-container").textContent();
-        if (flashText && flashText.includes("Email or Password is incorrect")) {
-          throw new BotError("wrong credentials", {
-            where: "FetLifeBrowser::login",
-          })
-        } else if (flashText && flashText.includes("we have a problem")) {
-          throw new BotError("account blocked", {
-            where: "FetLifeBrowser::login",
-          })
-        }
-      }
+      // const flashTagCount = await this.page.locator("div#static-flash-container").count()
+      // if (flashTagCount > 0) {
+      //   const flashText = await this.page.locator("div#static-flash-container").textContent();
+      //   if (flashText && flashText.includes("Email or Password is incorrect")) {
+      //     throw new BotError("wrong credentials", {
+      //       where: "FetLifeBrowser::login",
+      //     })
+      //   } else if (flashText && flashText.includes("we have a problem")) {
+      //     throw new BotError("account blocked", {
+      //       where: "FetLifeBrowser::login",
+      //     })
+      //   }
+      // }
       throw new BotError("login failed", {
         where: "FetLifeBrowser::login",
         error: error.message,
