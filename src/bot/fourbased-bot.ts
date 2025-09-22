@@ -4,7 +4,7 @@ import { PostApiService } from "../services/post-service";
 import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
-import { BotError } from '../utils/error';
+import { BotError, SessionTimeoutError } from '../utils/error';
 import { DEFAULT_LIVING_POSTS, ScheduleStatus } from "../types/constant";
 
 export class FourBasedBot extends PostBot {
@@ -40,11 +40,14 @@ export class FourBasedBot extends PostBot {
       return available;
     } catch (error) {
       this.logger.notifyError(error);
+      if (error instanceof SessionTimeoutError)
+        throw error;
       return false;
     }
   }
 
   private async deleteOldPosts() {
+    const deleteIds = [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
@@ -52,7 +55,6 @@ export class FourBasedBot extends PostBot {
       const postIds: string[] = await this.browser.getSelfPosts();
       const postsPublished = postIds.filter(postId => postRemains.includes(postId));
       this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`);
-      const deleteIds = [];
       while (postsPublished.length > postCount) {
         const postDeleting = postsPublished.pop()
         if (postDeleting) {
@@ -63,8 +65,10 @@ export class FourBasedBot extends PostBot {
       }
       return deleteIds;
     } catch (error: any) {
+      if (error instanceof SessionTimeoutError)
+        throw error;
       this.logger.notifyError(error)
-      return []
+      return deleteIds
     }
   }
 

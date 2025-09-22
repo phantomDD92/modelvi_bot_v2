@@ -1,17 +1,24 @@
 import moment from "moment";
-import { BotError } from "../utils/error";
+import { BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { IFourBasedChat, IFourBasedPost, IFourBasedProfile, IFourBasedUser, IFourBasedVault } from "../types/fourbased";
 import { IAccountID, IAccountSettings, IChatMessage } from "../types/interface";
 import { BaseBrowser } from "./base-browser";
 import { HttpStatusCode } from "axios";
-import { time } from "console";
 
 export class FourBasedBrowser extends BaseBrowser {
 
   protected profile!: IFourBasedProfile;
 
   public async home(): Promise<void> {
-    await this.page.goto("https://4based.com");
+    try {
+      await this.page.goto("https://4based.com", { timeout: 120000 });
+    } catch (error: any) {
+      throw new ProxyError("invalid proxy", {
+        where: "FourBasedBrowser::home",
+        error: error.message,
+        stack: error.stack,
+      })
+    }
   }
 
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
@@ -22,16 +29,14 @@ export class FourBasedBrowser extends BaseBrowser {
       await this.page.locator("input#current-password").fill(setting.password);
 
       const loginPromise = this.page.waitForResponse(response => {
-
         return response.url().includes("https://rest.4based.com/api/1.0/auth/login") && response.request().method() === "POST"
       }, { timeout: 180000 });
-
       const basePromise = this.page.waitForResponse(response => {
         return response.url().includes("https://rest.4based.com/api/1.0/base") && response.request().method() === "GET"
       }, { timeout: 180000 });
 
       await this.page.locator("auth-login ion-button.submit-button").click();
-      const loginResp = await loginPromise;
+      const [loginResp, baseResp] = await Promise.all([loginPromise, basePromise]);
       if (!loginResp.ok()) throw new BotError("wrong credentials", {
         where: "FourBasedBrowser::login",
         method: "POST",
@@ -42,7 +47,7 @@ export class FourBasedBrowser extends BaseBrowser {
       })
       const loginData = await loginResp.json();
       this.profile = loginData.user;
-      const baseResp = await basePromise;
+      // const baseResp = await basePromise;
       if (!baseResp.ok()) throw new BotError("login failed", {
         where: "FourBasedBrowser::login",
         method: "GET",
@@ -64,13 +69,44 @@ export class FourBasedBrowser extends BaseBrowser {
 
   }
 
-  public async getProfile(): Promise<void> {
+  // public async getProfile(): Promise<void> {
+  //   try {
+  //     const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${this.profile._id}`, {
+  //       headers: this.headers
+  //     });
+  //     if (!resp.ok())
+  //       throw new BotError("get profile failed", {
+  //         where: "FourBasedBrowser::getProfile",
+  //         method: "GET",
+  //         endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}`,
+  //         status: resp.statusText(),
+  //         response: await resp.text(),
+  //         headers: this.headers
+  //       });
+  //     const respData = await resp.json();
+  //     this.profile = respData;
+  //   } catch (error: any) {
+  //     if (error instanceof BotError)
+  //       throw error;
+  //     throw new BotError("get profile failed", {
+  //       where: "FourBasedBrowser::getProfile",
+  //       error: error.message,
+  //       stack: error.stack,
+  //     });
+  //   }
+  // }
+
+  public async getFolder(folderName: string) {
     try {
       const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${this.profile._id}`, {
         headers: this.headers
       });
-      if (!resp.ok())
-        throw new BotError("get profile failed", {
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::getFolder"
+          })
+        throw new BotError("get folders failed", {
           where: "FourBasedBrowser::getProfile",
           method: "GET",
           endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}`,
@@ -78,40 +114,30 @@ export class FourBasedBrowser extends BaseBrowser {
           response: await resp.text(),
           headers: this.headers
         });
+      }
       const respData = await resp.json();
-      this.profile = respData;
-    } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
-      throw new BotError("get profile failed", {
-        where: "FourBasedBrowser::getProfile",
-        error: error.message,
-        stack: error.stack,
-      });
-    }
-  }
-
-  public async getFolder(folderName: string) {
-    try {
-      await this.getProfile();
-      const folders = this.profile.folders || [];
+      const folders = respData.folders || [];
       if (folders.includes(folderName))
         return;
       folders.push(folderName);
-      const resp = await this.page.request.put(`https://rest.4based.com/api/1.0/user/${this.profile._id}`, {
+      const resp1 = await this.page.request.put(`https://rest.4based.com/api/1.0/user/${this.profile._id}`, {
         headers: this.headers,
         data: { folders }
       });
-      const respData = await resp.json();
-      if (!resp.ok()) throw new BotError("create folder failed", {
-        where: "FourBasedBrowser::getFolder",
-        method: "PUT",
-        endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}`,
-        params: { folders },
-        status: resp.statusText(),
-        response: respData,
-      });
-      this.profile = respData;
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::getFolder"
+          })
+        throw new BotError("create folder failed", {
+          where: "FourBasedBrowser::getFolder",
+          method: "PUT",
+          endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}`,
+          params: { folders },
+          status: resp.statusText(),
+          response: resp1.text(),
+        });
+      }
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -139,19 +165,25 @@ export class FourBasedBrowser extends BaseBrowser {
           }
         });
         const respData = await resp.json();
-        if (!resp.ok()) throw new BotError("find vault failed", {
-          where: "FourBasedBrowser::findVaultInFolder",
-          method: "GET",
-          endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`,
-          params: {
-            offset: 0,
-            limit: 100,
-            sort: JSON.stringify({ "created_at": "desc" }),
-            with_source: true,
-            belongs_to_folders: folderName,
-          },
-          status: resp.statusText(),
-        });
+        if (!resp.ok()) {
+          if (resp.status() == HttpStatusCode.Unauthorized)
+            throw new SessionTimeoutError("session timeout", {
+              where: "FourBasedBrowser::findVaultInFolder"
+            });
+          throw new BotError("find vault failed", {
+            where: "FourBasedBrowser::findVaultInFolder",
+            method: "GET",
+            endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`,
+            params: {
+              offset: 0,
+              limit: 100,
+              sort: JSON.stringify({ "created_at": "desc" }),
+              with_source: true,
+              belongs_to_folders: folderName,
+            },
+            status: resp.statusText(),
+          });
+        }
         if (resp.status() == HttpStatusCode.NoContent)
           break;
         const vaults: IFourBasedVault[] = respData || [];
@@ -173,37 +205,6 @@ export class FourBasedBrowser extends BaseBrowser {
       });
     }
   }
-
-  // public async getVaultsInFolder(folderName: string): Promise<string[]> {
-  //   const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`, {
-  //     headers: this.headers,
-  //     params: {
-  //       offset: 0,
-  //       limit: 100,
-  //       sort: JSON.stringify({ "created_at": "desc" }),
-  //       with_source: true,
-  //       belongs_to_folders: folderName,
-  //     }
-  //   });
-  //   const respData = await resp.json();
-  //   if (!resp.ok()) throw new BotError("get vaults failed", {
-  //     where: "FourBasedBrowser::getVaultsInFolder",
-  //     method: "GET",
-  //     endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`,
-  //     params: {
-  //       offset: 0,
-  //       limit: 100,
-  //       sort: JSON.stringify({ "created_at": "desc" }),
-  //       with_source: true,
-  //       belongs_to_folders: folderName,
-  //     },
-  //     status: resp.statusText(),
-  //   });
-  //   if (resp.status() == HttpStatusCode.NoContent)
-  //     return [];
-  //   const vaults: IFourBasedVault[] = respData || [];
-  //   return vaults.map(vault => vault._id);
-  // }
 
   public async createVault(mediaPath: string): Promise<string | undefined> {
     try {
@@ -242,7 +243,6 @@ export class FourBasedBrowser extends BaseBrowser {
         stack: error.stack,
       });
     }
-
   }
 
   public async moveVaultToFolder(vaultId: string, folderName: string) {
@@ -251,13 +251,19 @@ export class FourBasedBrowser extends BaseBrowser {
         headers: this.headers,
         data: { belongs_to_folders: [folderName], ids: [vaultId] }
       });
-      if (!resp.ok()) throw new BotError("move vault failed", {
-        where: "FourBasedBrowser::moveVaultToFolder",
-        method: "PUT",
-        endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`,
-        status: resp.statusText(),
-        response: await resp.json()
-      })
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::moveVaultToFolder"
+          });
+        throw new BotError("move vault failed", {
+          where: "FourBasedBrowser::moveVaultToFolder",
+          method: "PUT",
+          endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`,
+          status: resp.statusText(),
+          response: await resp.json()
+        });
+      }
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -304,14 +310,20 @@ export class FourBasedBrowser extends BaseBrowser {
         data: params
       })
       const respData = await resp.json();
-      if (!resp.ok()) throw new BotError("schedule post failed", {
-        where: "FourBasedBrowser::schedulePost",
-        method: "POST",
-        endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/`,
-        params,
-        status: resp.statusText(),
-        response: respData
-      });
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::schedulePost"
+          });
+        throw new BotError("schedule post failed", {
+          where: "FourBasedBrowser::schedulePost",
+          method: "POST",
+          endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/`,
+          params,
+          status: resp.statusText(),
+          response: respData
+        });
+      }
       return respData._id;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -329,13 +341,19 @@ export class FourBasedBrowser extends BaseBrowser {
       const resp = await this.page.request.delete(`https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/${postId}`, {
         headers: this.headers
       });
-      if (!resp.ok())
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::deletePost"
+          });
         throw new BotError("delete post failed", {
           where: "FourBasedBrowser::deletePost",
           method: "DELETE",
           endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/${postId}`,
           status: resp.statusText(),
         });
+      }
+
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -364,20 +382,26 @@ export class FourBasedBrowser extends BaseBrowser {
           }
         });
         // const respData = await resp.json();
-        if (!resp.ok()) throw new BotError("get self posts failed", {
-          where: "FourBasedBrowser::getSelfPosts",
-          method: "GET",
-          endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack`,
-          params: {
-            offset,
-            limit: 24,
-            categories: "media",
-            sort: JSON.stringify({ created_at: "desc" }),
-            is_subscription_item: false
-          },
-          status: resp.statusText(),
-          response: await resp.text()
-        });
+        if (!resp.ok()) {
+          if (resp.status() == HttpStatusCode.Unauthorized)
+            throw new SessionTimeoutError("session timeout", {
+              where: "FourBasedBrowser::getSelfPosts"
+            });
+          throw new BotError("get self posts failed", {
+            where: "FourBasedBrowser::getSelfPosts",
+            method: "GET",
+            endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack`,
+            params: {
+              offset,
+              limit: 24,
+              categories: "media",
+              sort: JSON.stringify({ created_at: "desc" }),
+              is_subscription_item: false
+            },
+            status: resp.statusText(),
+            response: await resp.text()
+          });
+        }
         if (resp.status() == HttpStatusCode.NoContent)
           break;
         const respData = await resp.json();
@@ -408,14 +432,19 @@ export class FourBasedBrowser extends BaseBrowser {
         headers: this.headers,
         params: { offset: 0, limit: 40, search: "", sort: "%7B%22created_at%22%3A%22desc%22%7D" }
       });
-      if (!resp.ok())
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::getFollowers"
+          });
         throw new BotError("get followers failed", {
           where: "FourBasedBrowser::getFollowers",
           method: "GET",
           endpoint: `https://rest.4based.com/api/1.0/user/${userId}/follower`,
           status: resp.statusText(),
           response: await resp.text(),
-        })
+        });
+      }
       const respData: IFourBasedUser[] = await resp.json();
       return respData.filter(user => !user.creator);
     } catch (error: any) {
@@ -449,7 +478,11 @@ export class FourBasedBrowser extends BaseBrowser {
         headers: this.headers,
         params
       });
-      if (!resp.ok())
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::getMonthlyEarnings"
+          });
         throw new BotError("get earnings failed", {
           where: "FourBasedBrowser::getMonthlyEarnings",
           method: "GET",
@@ -458,6 +491,7 @@ export class FourBasedBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: await resp.text()
         })
+      }
       const respData = await resp.text();
       return parseFloat(respData || "0");
     } catch (error: any) {
@@ -485,11 +519,12 @@ export class FourBasedBrowser extends BaseBrowser {
       }
       const resp = await this.page.request.get(
         `https://rest.4based.com/api/1.0/user/${this.profile._id}/chatsByList`,
-        {
-          headers: this.headers,
-          params
-        });
-      if (!resp.ok())
+        { headers: this.headers, params });
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::getUnreadChats"
+          });
         throw new BotError("get chats failed", {
           where: "FourBasedBrowser::getUnreadChats",
           method: "GET",
@@ -498,6 +533,7 @@ export class FourBasedBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: await resp.text(),
         });
+      }
       const respData = await resp.json();
       const chats: IFourBasedChat[] = respData || [];
       const messages: IChatMessage[] = chats.map(chat => {
@@ -512,6 +548,21 @@ export class FourBasedBrowser extends BaseBrowser {
         where: "FourBasedBrowser::getUnreadChats",
         error: error.message,
         stack: error.stack
+      })
+    }
+  }
+
+  public async refreshSession(): Promise<void> {
+    try {
+      const profilePromise = this.page.waitForRequest(`https://rest.4based.com/api/1.0/user/name/${this.profile.name}`);
+      await this.page.goto(`https://4based.com/profile/${this.profile.name}`);
+      const profileReq = await profilePromise;
+      this.headers = await profileReq.allHeaders();
+    } catch (error: any) {
+      throw new BotError("refresh session failed", {
+        where: "FourBasedBrowser::refreshSession",
+        error: error.message,
+        stack: error.stack,
       })
     }
   }
