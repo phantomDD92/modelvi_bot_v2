@@ -1,10 +1,11 @@
 import moment from "moment";
-import { AuthError, BotError, ProxyError } from "../utils/error";
+import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
 import { ILoyalFansMedia, ILoyalFansPost, ILoyalFansProfile, ILoyalFansStory } from "../types/loyalfans";
 import { PostType } from "../types/constant";
+import { HttpStatusCode } from "axios";
 
 export class LoyalFansBrowser extends BaseBrowser {
 
@@ -115,7 +116,15 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: params
       });
-      if (!resp.ok())
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.InternalServerError) {
+          const respData = await resp.json()
+          if (respData.httpCode == HttpStatusCode.Forbidden) {
+            throw new SessionTimeoutError("session timeout", {
+              where: "LoyalFansBrowser::getMonthlyEarnings"
+            });
+          }
+        }
         throw new BotError("get earnings failed", {
           where: "LoyalFansBrowser::getMonthlyEarnings",
           method: "POST",
@@ -124,6 +133,7 @@ export class LoyalFansBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: await resp.text(),
         })
+      }
       const respData = await resp.json()
       return respData.NET?.total || 0;
     } catch (error: any) {
@@ -555,4 +565,18 @@ export class LoyalFansBrowser extends BaseBrowser {
     }
   }
 
+  public async refreshSession(): Promise<void> {
+    try {
+      const summaryPromise = this.page.waitForRequest("https://www.loyalfans.com/api/v2/funds/earnings/summary?ngsw-bypass=true", { timeout: 120000 });
+      await this.page.goto("https://www.loyalfans.com/settings/earnings/summary", { timeout: 120000 });
+      const summaryReq = await summaryPromise;
+      this.headers = await summaryReq.allHeaders();
+    } catch (error: any) {
+      throw new BotError("refresh session failed", {
+        where: "LoyalFansBrowser::refreshSession",
+        error: error.message,
+        stack: error.stack,
+      })
+    }
+  }
 }

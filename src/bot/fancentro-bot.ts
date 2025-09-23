@@ -2,7 +2,7 @@ import moment from 'moment';
 import { FancentroBrowser } from '../browser/fancentro-browser';
 import { PostBot } from './post-bot';
 import { IBotConfig, IContent, ISchedulePost, IScheduleResult } from '../types/interface';
-import { DEFAULT_LIVING_POSTS, ScheduleStatus } from '../types/constant';
+import { ActionType, DEFAULT_LIVING_POSTS, ScheduleStatus } from '../types/constant';
 import { PostApiService } from '../services/post-service';
 import { Logger } from '../utils/logger';
 
@@ -190,7 +190,7 @@ export class FancentroBot extends PostBot {
       const revenue = await this.browser.getMonthlyEarnings();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createHistory(`bot closed due to no balance`);
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error: any) {
       this.logger.warn(`check balance failed`);

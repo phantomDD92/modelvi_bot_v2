@@ -2,7 +2,7 @@ import moment from 'moment';
 
 import { PostBot } from './post-bot';
 
-import { DEFAULT_LIVING_POSTS, DEFAULT_STORY_MAX_COUNT, F2FStoryType, ScheduleStatus } from '../types/constant';
+import { ActionType, DEFAULT_LIVING_POSTS, DEFAULT_STORY_MAX_COUNT, F2FStoryType, ScheduleStatus } from '../types/constant';
 import { IF2fFolder, IF2fPost } from '../types/f2f';
 import { IBotConfig, IChatMessage, ICommentParams, IContent, IMedia, ISchedulePost, IScheduleResult } from '../types/interface';
 import { F2fBrowser } from '../browser/f2f-browser';
@@ -175,7 +175,7 @@ export class F2fBot extends PostBot {
       const revenue = await this.getMonthlyRevenue();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createHistory(`bot closed due to no balance`);
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error: any) {
       this.logger.notifyError(error);

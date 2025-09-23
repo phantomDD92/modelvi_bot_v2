@@ -5,7 +5,7 @@ import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from "..
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
 import { BotError } from '../utils/error';
-import { DEFAULT_LIVING_POSTS as DEFAULT_LIVING_POSTS, ScheduleStatus } from "../types/constant";
+import { ActionType, DEFAULT_LIVING_POSTS as DEFAULT_LIVING_POSTS, ScheduleStatus } from "../types/constant";
 
 export class FanvueBot extends PostBot {
   protected browser!: FanvueBrowser;
@@ -63,7 +63,7 @@ export class FanvueBot extends PostBot {
       const revenue = await this.browser.getMonthlyEarnings();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createHistory(`bot closed due to no balance`);
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error: any) {
       this.logger.notifyError(error);

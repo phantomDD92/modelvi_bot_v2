@@ -128,7 +128,7 @@ export class FancentroBrowser extends BaseBrowser {
         });
       if (authResult == "twofa") {
         if (!setting.device)
-          throw new BotError("no security key", {
+          throw new AuthError("no security key", {
             where: "FancentroBrowser::login",
             error: "no security key",
           });

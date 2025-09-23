@@ -1,6 +1,6 @@
 import { KnkyBrowser } from "../browser/knky-browser";
 import { PostApiService } from "../services/post-service";
-import { DEFAULT_LIVING_POSTS, DEFAULT_STORY_MAX_COUNT, KnkyStoryType, ScheduleStatus } from "../types/constant";
+import { ActionType, DEFAULT_LIVING_POSTS, DEFAULT_STORY_MAX_COUNT, KnkyStoryType, ScheduleStatus } from "../types/constant";
 import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
@@ -169,7 +169,7 @@ export class KnKyBot extends PostBot {
       const revenue = await this.browser.getMonthlyEarnings();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createHistory(`bot closed due to no balance`);
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error: any) {
       this.logger.warn(`check balance failed`);

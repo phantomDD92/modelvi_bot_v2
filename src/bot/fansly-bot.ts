@@ -1,6 +1,6 @@
 import { FanslyBrowser } from '../browser/fansly-browser';
 import { FanslyService } from '../services/fansly-service';
-import { DEFAULT_LIVING_POSTS, PostType, ScheduleStatus } from '../types/constant';
+import { ActionType, DEFAULT_LIVING_POSTS, PostType, ScheduleStatus } from '../types/constant';
 import { IFanslyMedia } from '../types/fansly';
 import { IBotConfig, IChatMessage, IContent, IMedia, ISchedulePost, IScheduleResult } from '../types/interface';
 import { BotError } from '../utils/error';
@@ -199,7 +199,7 @@ export class FanslyBot extends PostBot {
       const revenue = await this.getMonthlyRevenue();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createHistory(`bot closed due to no balance`);
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error: any) {
       this.logger.warn(`check balance failed`);

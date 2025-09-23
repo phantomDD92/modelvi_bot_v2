@@ -36,7 +36,9 @@ export class MymFansBot extends PostBot {
   protected async doCalibrate(): Promise<boolean> {
     try {
       const revenue = await this.browser.getMonthlyEarning();
-      const available = await this.service.checkBalance(revenue)
+      const available = await this.service.checkBalance(revenue);
+      if (!available)
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error) {
       this.logger.notifyError(error);

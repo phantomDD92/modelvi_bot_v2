@@ -2,9 +2,8 @@
 import moment from 'moment';
 import { LoyalFansBrowser } from '../browser/loyalfans-browser';
 import { PostApiService } from '../services/post-service';
-import { DEFAULT_LIVING_POSTS, ScheduleStatus } from '../types/constant';
-import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from '../types/interface';
-import { BotError } from '../utils/error';
+import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from '../types/constant';
+import { IBotConfig, IContent, ISchedulePost } from '../types/interface';
 import { Logger } from '../utils/logger';
 import { PostBot } from './post-bot';
 
@@ -112,26 +111,27 @@ export class LoyalFansBot extends PostBot {
       postIndex = 0;
     const content: IContent = contents[postIndex];
     const media = content.media[0]
+    let deleteIds: string[] = [];
     try {
       // open content media
       const mediaId = await this.getMedia(content.folder, media.name, media.uuid);
       if (media.uuid != mediaId) {
         await this.service.updateContentMedia(postIndex, mediaId);
-        await this.service.createHistory(`upload ${postIndex + 1}st media`);
+        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media`, target: mediaId, description: media.name });
       }
       // create a post
       await this.browser.schedulePost(moment().toDate(), content.title, content.postTags, mediaId);
-      await this.service.createHistory(`create ${postIndex + 1}st post(${content.title})`)
-      const deleteIds = await this.removePosts();
+      await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post`, description: content.title })
+      deleteIds = await this.removePosts();
       if (deleteIds.length > 0) {
-        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
       }
-      await this.service.updatePostSetting(true, undefined, []);
+      await this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.updatePostSetting(true, undefined, []);
-      await this.service.createHistory(`create ${postIndex + 1}st post failed`);
+      await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post` });
       return false;
     }
   }
@@ -140,14 +140,12 @@ export class LoyalFansBot extends PostBot {
     const schedule = post.schedule;
     try {
       const mediaId = await this.getMedia(schedule.folder, schedule.media.name);
-      await this.service.createHistory(`upload media(${mediaId}) for schedule post(${schedule.title})`);
-      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaId, schedule.type, schedule.price);
-      this.logger.info(`schedule post(${postId}, ${schedule.title})`);
-      await this.service.createHistory(`create scheduled post(${postId}, ${schedule.title})`);
+      await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaId, schedule.type, schedule.price);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create scheduled post`, description: schedule.title });
       await this.service.updateScheduleResult({ id: post._id, post: undefined, status: ScheduleStatus.SCHEDULED });
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createHistory(`create scheduled post(${schedule.title}) failed`);
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create scheduled post`, description: schedule.title });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" });
     }
   }
@@ -176,10 +174,11 @@ export class LoyalFansBot extends PostBot {
 
   protected async doCalibrate(): Promise<boolean> {
     try {
+      await this.browser.refreshSession();
       const revenue = await this.browser.getMonthlyEarnings();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createHistory(`bot closed due to no balance`);
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error: any) {
       this.logger.notifyError(error);
