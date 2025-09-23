@@ -80,4 +80,5 @@ export const ActionType = {
   COMMENT: 5,
   CHAT: 6,
   BALANCE: 7,
+  SCHEDULE: 8,
 }

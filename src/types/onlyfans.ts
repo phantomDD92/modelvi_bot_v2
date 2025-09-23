@@ -24,3 +24,11 @@ export interface IOnlyFansUpload {
   host: string,
   extra: string,
 }
+
+export interface IOnlyFansPost {
+  author: { id: number },
+  id: number,
+  text: string,
+  tipAmount: string,
+  postedAt: string,
+}

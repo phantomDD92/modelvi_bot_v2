@@ -1,10 +1,11 @@
 import { BotError } from "../utils/error";
-import { IAccountID, IAccountSettings, IBotConfig, IContent } from "../types/interface";
+import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
 import fs from 'fs';
-import { IOnlyFansCategory, IOnlyFansProfile } from "../types/onlyfans";
+import { IOnlyFansCategory, IOnlyFansPost, IOnlyFansProfile } from "../types/onlyfans";
 import moment from "moment";
+import { PostType } from "../types/constant";
 
 declare global {
   interface Window {
@@ -74,7 +75,6 @@ export class OnlyFansBrowser extends BaseBrowser {
   }
 
   private async tryLogin(): Promise<boolean> {
-
     // click login button
     const loginPromise = this.page.waitForResponse("https://onlyfans.com/api2/v2/users/login", { timeout: 120000 });
     await this.page.waitForTimeout(1000);
@@ -96,72 +96,48 @@ export class OnlyFansBrowser extends BaseBrowser {
   }
 
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
-    // let count = 0;
-    // while(true)
-    //   try {
-    //     await this.tryLogin(setting);
-    //     break;
-    //   } catch (error) {
-    //     count += 1;
-    //     if (count > 3)
-    //       throw error;
-    //   }
-    // }
-    // // await this.page.waitForLoadState('load');
-    // this.logger.info("start login");
-    // await this.page.locator('div.login_content input[name="email"]').waitFor();
+    try {
+      this.logger.info("start login");
+      await this.page.goto("https://onlyfans.com", { waitUntil: "domcontentloaded" });
+      await this.page.locator('div.login_content input[name="email"]').waitFor();
 
-    // // input login credentials
-    // await this.page.locator('div.login_content input[name="email"]').fill(`${setting.email}`);
-    // await this.page.locator('div.login_content input[name="password"]').fill(`${setting.password}`);
-
-    // // click login button
-    // const loginPromise = this.page.waitForResponse("https://onlyfans.com/api2/v2/users/login", { timeout: 120000 });
-    // await this.page.waitForTimeout(1000);
-    // await this.page.locator('div.login_content button[type="submit"]').click();
-    // const loginResp = await loginPromise;
-    // await this.page.waitForTimeout(600000);
-    // if (!loginResp.ok())
-    //   throw new BotError("login failed", {
-    //     where: "OnlyFansBrowser::login",
-    //     method: "GET",
-    //     endpoint: "https://onlyfans.com/api2/v2/users/login",
-    //     status: loginResp.statusText(),
-    //     response: await loginResp.text(),
-    //   });
-    this.logger.info("start login");
-    await this.page.goto("https://onlyfans.com", { waitUntil: "domcontentloaded" });
-    await this.page.locator('div.login_content input[name="email"]').waitFor();
-
-    // input login credentials
-    await this.page.locator('div.login_content input[name="email"]').fill(`${setting.email}`);
-    await this.page.locator('div.login_content input[name="password"]').fill(`${setting.password}`);
-    const result = await this.tryLogin();
-    if (!result) {
-      for (var i = 0; i < 10; i++) {
-        if (this.captchaSolved) {
-          await this.tryLogin();
-          break;
+      // input login credentials
+      await this.page.locator('div.login_content input[name="email"]').fill(`${setting.email}`);
+      await this.page.locator('div.login_content input[name="password"]').fill(`${setting.password}`);
+      const result = await this.tryLogin();
+      if (!result) {
+        for (var i = 0; i < 10; i++) {
+          if (this.captchaSolved) {
+            await this.tryLogin();
+            break;
+          }
+          console.log("waiting : ", i * 2000);
+          await this.page.waitForTimeout(2000);
         }
-        console.log("waiting : ", i * 2000);
-        await this.page.waitForTimeout(2000);
       }
-    }
-    const mePromise = this.page.waitForResponse("https://onlyfans.com/api2/v2/users/me")
-    const meResponse = await mePromise;
-    if (!meResponse.ok())
-      throw new BotError("get profile failed", {
+      const mePromise = this.page.waitForResponse("https://onlyfans.com/api2/v2/users/me")
+      const meResponse = await mePromise;
+      if (!meResponse.ok())
+        throw new BotError("get profile failed", {
+          where: "OnlyFansBrowser::login",
+          method: "GET",
+          endpoint: "https://onlyfans.com/api2/v2/users/me",
+          status: meResponse.statusText(),
+          response: await meResponse.text(),
+        });
+      const meData = await meResponse.json();
+      this.profile = meData;
+      this.headers = await meResponse.request().allHeaders();
+      return { id: `${this.profile.id}`, alias: this.profile.username };
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("login failed", {
         where: "OnlyFansBrowser::login",
-        method: "GET",
-        endpoint: "https://onlyfans.com/api2/v2/users/me",
-        status: meResponse.statusText(),
-        response: await meResponse.text(),
-      });
-    const meData = await meResponse.json();
-    this.profile = meData;
-    // await this.page.waitForTimeout(600000);
-    this.headers = await meResponse.request().allHeaders();
-    return { id: `${this.profile.id}`, alias: this.profile.username };
+        error: error.message,
+        stack: error.stack,
+      })
+    }
   }
 
   public async getMonthlyEarnings(): Promise<number> {
@@ -258,29 +234,39 @@ export class OnlyFansBrowser extends BaseBrowser {
     }
   }
 
-  public async uploadMedia(image: string) {
+  public async uploadMedia(image: string): Promise<number> {
     try {
       await this.page.goto("https://onlyfans.com/posts/create", { timeout: 120000 });
       console.log("go to create page");
-      await this.page.locator('button#attach_file_photo').waitFor({ timeout: 120000 }) // your upload button's selector
+      await this.page.locator('div.stories-list button.m-create').waitFor({ timeout: 120000 }) // your upload button's selector
       console.log("find upload button");
-      const uploadPromise = this.page.waitForResponse("https://convert.onlyfans.com/file/upload", { timeout: 300000 });
+      // await this.page.waitForTimeout(10000);
+      // upload media
       const [fileChooser] = await Promise.all([
         this.page.waitForEvent('filechooser'),
-        this.page.click('button#attach_file_photo') // your upload button's selector
+        this.page.click('button#attach_file_photo')
       ]);
+      const uploadPromise = this.page.waitForResponse(response => {
+        console.log(response.url())
+        return response.url().includes("https://onlyfans.com/api2/v2/vault/media/hash")
+      });
       await fileChooser.setFiles(image);
-      const uploadResp = await uploadPromise;
+      const uploadResp = await uploadPromise
       if (!uploadResp.ok()) {
         throw new BotError("upload media failed", {
           where: "OnlyFansBrowser::uploadMedia",
-          method: "POST",
-          endpoint: "https://convert.onlyfans.com/file/upload"
-        });
+          status: uploadResp.statusText(),
+          response: await uploadResp.text()
+        })
       }
       const uploadData = await uploadResp.json();
-      console.log(uploadResp.request().postDataJSON());
-      
+      if (!uploadData.id)
+        throw new BotError("upload media failed", {
+          where: "OnlyFansBrowser::uploadMedia",
+          status: uploadResp.statusText(),
+          response: await uploadResp.text()
+        });
+      return uploadData.id;
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -290,22 +276,52 @@ export class OnlyFansBrowser extends BaseBrowser {
         stack: error.stack,
       })
     }
-
   }
 
-  public async schedulePost(scheduledAt: Date, title: string, tags: string[], image: string, postType?: number, postPrice?: number) {
+  public async schedulePost(image: string, scheduledAt: Date, title: string, postType?: number, postPrice?: number): Promise<string> {
     try {
-      await this.page.goto("https://onlyfans.com/posts/create", { timeout: 120000 });
+      await this.page.goto(`https://onlyfans.com/posts/create?scheduleDate=${moment(scheduledAt).utc().toDate().toISOString()}`, { timeout: 120000 });
       console.log("go to create page");
-      await this.page.locator('button#attach_file_photo').waitFor({ timeout: 120000 }) // your upload button's selector
+      await this.page.locator('div.stories-list button.m-create').waitFor({ timeout: 120000 }) // your upload button's selector
       console.log("find upload button");
-      // await this.page.click('button#attach_file_photo');
-      // console.log("click");
+      // await this.page.waitForTimeout(10000);
+      // upload media
       const [fileChooser] = await Promise.all([
         this.page.waitForEvent('filechooser'),
-        this.page.click('button#attach_file_photo') // your upload button's selector
+        this.page.click('button#attach_file_photo')
       ]);
+      const uploadPromise = this.page.waitForResponse(response => {
+        console.log(response.url())
+        return response.url().includes("https://onlyfans.com/api2/v2/vault/media/hash")
+      });
       await fileChooser.setFiles(image);
+      const uploadResp = await uploadPromise
+      if (!uploadResp.ok()) {
+        throw new BotError("upload media failed", {
+          where: "OnlyFansBrowser::uploadMedia",
+          status: uploadResp.statusText(),
+          response: await uploadResp.text()
+        })
+      }
+      const uploadData = await uploadResp.json();
+      if (!uploadData.id)
+        throw new BotError("upload media failed", {
+          where: "OnlyFansBrowser::uploadMedia",
+          status: uploadResp.statusText(),
+          response: await uploadResp.text()
+        });
+      await this.page.locator("div.input-text-editor div.tiptap").pressSequentially(title);
+      if (postType == PostType.PAID) {
+        await this.page.locator("button[at-attr='price_btn']").click();
+        await this.page.locator("div#ModalPostPrice input[at-attr='input']").pressSequentially("" + postPrice);
+        await this.page.locator("div#ModalPostPrice footer > button").last().click();
+      }
+      const createPromise = this.page.waitForResponse("https://onlyfans.com/api2/v2/posts");
+      await this.page.locator("div.g-page__header button.g-btn", { hasText: "Save" }).click();
+      const createResp = await createPromise;
+      const createData = await createResp.json()
+      console.log(createData.id);
+      return "" + createData.id;
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -335,6 +351,25 @@ export class OnlyFansBrowser extends BaseBrowser {
         throw error;
       throw new BotError("delete post failed", {
         where: "OnlyFansBrowser::deletePost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async getSelfPosts(): Promise<string[]> {
+    try {
+      const postsPromise = this.page.waitForResponse(response => response.url().includes(`https://onlyfans.com/api2/v2/users/${this.profile.id}/posts?`), {timeout: 60000});
+      await this.page.goto(`https://onlyfans.com/${this.profile.username}`, {timeout: 120000});
+      const postsResp = await postsPromise;
+      const postsData = await postsResp.json()
+      const posts: IOnlyFansPost[] = postsData.list || []
+      return posts.map(post => "" + post.id)
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("delete post failed", {
+        where: "OnlyFansBrowser::getSelfPosts",
         error: error.message,
         stack: error.stack,
       });
