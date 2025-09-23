@@ -1,4 +1,4 @@
-import { BotError, SessionTimeoutError } from "../utils/error";
+import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { PostType } from "../types/constant";
 import { IAccountID, IAccountSettings, IBotConfig, IChatMessage, IContent } from "../types/interface";
 import { IMaloumCategory, IMaloumChat, IMaloumEarning, IMaloumFolder, IMaloumMediaInfo, IMaloumPost } from "../types/maloum";
@@ -23,7 +23,7 @@ export class MaloumBrowser extends BaseBrowser {
     try {
       await this.page.goto("https://maloum.com/", { waitUntil: "domcontentloaded", timeout: 60000 });
     } catch (error: any) {
-      throw new BotError("proxy blocked", {
+      throw new ProxyError("proxy blocked", {
         where: "MaloumBrowser::home",
         error: error.message,
         stack: error.stack,
@@ -85,7 +85,7 @@ export class MaloumBrowser extends BaseBrowser {
       await this.page.locator("form button", { hasText: "Login" }).first().click();
       const loginResp = await loginPromise;
       if (!loginResp.ok())
-        throw new BotError("wrong credentials", {
+        throw new AuthError("wrong credentials", {
           where: "MaloumBrowser::login",
           method: "POST",
           endpoint: "https://api.maloum.com/user-management/login",
@@ -117,7 +117,7 @@ export class MaloumBrowser extends BaseBrowser {
       this.headers = await meResp.request().allHeaders();
       const meData = await meResp.json();
       if (!meData.isCreator)
-        throw new BotError("not creator account", {
+        throw new AuthError("not creator account", {
           where: "MaloumBrowser::login",
           method: "GET",
           endpoint: "https://api.maloum.com/users/current",
@@ -128,7 +128,7 @@ export class MaloumBrowser extends BaseBrowser {
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
-      throw new BotError("wrong credentials", {
+      throw new AuthError("wrong credentials", {
         where: "MaloumBrowser::login",
         error: error.message,
         stack: error.stack,

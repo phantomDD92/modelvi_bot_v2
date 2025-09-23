@@ -13,7 +13,7 @@ export class FourBasedBrowser extends BaseBrowser {
     try {
       await this.page.goto("https://4based.com", { timeout: 120000 });
     } catch (error: any) {
-      throw new ProxyError("invalid proxy", {
+      throw new ProxyError("proxy blocked", {
         where: "FourBasedBrowser::home",
         error: error.message,
         stack: error.stack,

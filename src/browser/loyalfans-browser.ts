@@ -1,5 +1,5 @@
 import moment from "moment";
-import { BotError, ProxyError } from "../utils/error";
+import { AuthError, BotError, ProxyError } from "../utils/error";
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
@@ -60,7 +60,7 @@ export class LoyalFansBrowser extends BaseBrowser {
       if (!loginResp.ok()) {
         const loginData = await loginResp.json();
         if ((loginData?.message || "").includes("Wrong"))
-          throw new BotError("wrong credentials", {
+          throw new AuthError("wrong credentials", {
             where: "LoyalFansBrowser::login",
             method: "POST",
             endpoint: "https://www.loyalfans.com/api/v2/auth/login?ngsw-bypass=true",

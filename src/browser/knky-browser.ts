@@ -1,6 +1,6 @@
 import moment from "moment";
 import CryptoJS from 'crypto-js';
-import { BotError, SessionTimeoutError } from "../utils/error";
+import { BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { KnkyStoryType, PostType } from "../types/constant";
 import { IAccountID, IAccountSettings, IBotConfig, IContent, ISchedulePost } from "../types/interface";
 import { IKnkyFolder, IKnkyPost, IKnkyUser as IKnkyProfile, IKnkyRevenue, IKnkyStat, IKnkyStory, IKnkyStoryData, IKnkyVault } from "../types/knky";
@@ -34,7 +34,7 @@ export class KnkyBrowser extends BaseBrowser {
       await this.page.goto("https://knky.co/", { waitUntil: "domcontentloaded", timeout: 100000 });
       return
     } catch (error: any) {
-      throw new BotError("go to home failed", {
+      throw new ProxyError("proxy blocked", {
         where: "KnkyBrowser::home",
         error: error.message,
         stack: error.stack,

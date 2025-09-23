@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { BotError } from "../utils/error";
+import { AuthError, BotError, ProxyError } from "../utils/error";
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
@@ -46,7 +46,7 @@ export class FetLifeBrowser extends BaseBrowser {
       await this.page.goto("https://fetlife.com/login", { waitUntil: "domcontentloaded" });
       this.logger.info("open home page");
     } catch (error: any) {
-      throw new BotError("proxy blocked", {
+      throw new ProxyError("proxy blocked", {
         where: "FetLifeBrowser::home",
         error: error.message,
         stack: error.stack,
@@ -92,19 +92,19 @@ export class FetLifeBrowser extends BaseBrowser {
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
-      // const flashTagCount = await this.page.locator("div#static-flash-container").count()
-      // if (flashTagCount > 0) {
-      //   const flashText = await this.page.locator("div#static-flash-container").textContent();
-      //   if (flashText && flashText.includes("Email or Password is incorrect")) {
-      //     throw new BotError("wrong credentials", {
-      //       where: "FetLifeBrowser::login",
-      //     })
-      //   } else if (flashText && flashText.includes("we have a problem")) {
-      //     throw new BotError("account blocked", {
-      //       where: "FetLifeBrowser::login",
-      //     })
-      //   }
-      // }
+      const flashTagCount = await this.page.locator("div#static-flash-container").count()
+      if (flashTagCount > 0) {
+        const flashText = await this.page.locator("div#static-flash-container").textContent();
+        if (flashText && flashText.includes("Email or Password is incorrect")) {
+          throw new AuthError("wrong credentials", {
+            where: "FetLifeBrowser::login",
+          })
+        } else if (flashText && flashText.includes("we have a problem")) {
+          throw new AuthError("account blocked", {
+            where: "FetLifeBrowser::login",
+          })
+        }
+      }
       throw new BotError("login failed", {
         where: "FetLifeBrowser::login",
         error: error.message,

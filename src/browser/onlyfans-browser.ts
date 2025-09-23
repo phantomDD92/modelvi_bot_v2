@@ -1,4 +1,4 @@
-import { BotError } from "../utils/error";
+import { BotError, ProxyError } from "../utils/error";
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
@@ -61,12 +61,12 @@ export class OnlyFansBrowser extends BaseBrowser {
       await this.page.goto("https://onlyfans.com", { waitUntil: "domcontentloaded" });
       const errorCount = await this.page.locator("div#cf-error-details").count();
       if (errorCount > 0)
-        throw new BotError("proxy blocked", {
+        throw new ProxyError("proxy blocked", {
           where: "OnlyFansBrowser::home",
         });
       this.logger.info("open home page");
     } catch (error: any) {
-      throw new BotError("proxy blocked", {
+      throw new ProxyError("proxy blocked", {
         where: "OnlyFansBrowser::home",
         error: error.message,
         stack: error.stack,

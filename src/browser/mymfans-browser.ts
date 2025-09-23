@@ -25,7 +25,7 @@ export class MymFansBrowser extends BaseBrowser {
     try {
       await this.page.goto("https://mym.fans/", { waitUntil: "domcontentloaded", timeout: 120000 });
     } catch (error: any) {
-      throw new ProxyError("invalid proxy", {
+      throw new ProxyError("proxy blocked", {
         where: "MymFansBrowser::home",
         error: error.message,
         stack: error.stack,

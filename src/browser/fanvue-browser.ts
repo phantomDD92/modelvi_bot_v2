@@ -1,6 +1,6 @@
 import moment from "moment";
 import fs from 'fs'
-import { BotError } from "../utils/error";
+import { AuthError, BotError, ProxyError } from "../utils/error";
 import { IFanvueChat, IFanvueEarning, IFanvueFolder, IFanvuePost, IFanvueProfile, IFanvueVault } from "../types/fanvue";
 import { IAccountID, IAccountSettings, IBotConfig, IChatMessage } from "../types/interface";
 import { Logger } from "../utils/logger";
@@ -53,7 +53,7 @@ export class FanvueBrowser extends BaseBrowser {
       })
       await this.page.goto("https://www.fanvue.com/", { waitUntil: "domcontentloaded", timeout: 120000 });
     } catch (error: any) {
-      throw new BotError("proxy blocked", {
+      throw new ProxyError("proxy blocked", {
         where: "FanvueBrowser::home",
         error: error.message,
         stack: error.stack,
@@ -92,7 +92,7 @@ export class FanvueBrowser extends BaseBrowser {
       await this.page.getByRole('button', { name: 'Sign In', exact: true }).click();
       // check login api response
       const loginResp = await loginPromise;
-      if (!loginResp.ok()) throw new BotError("wrong credentials", {
+      if (!loginResp.ok()) throw new AuthError("wrong credentials", {
         where: "FanvueBrowser::login",
         method: "POST",
         endpoint: "https://www.fanvue.com/api/auth/callback/credentials",
@@ -111,7 +111,7 @@ export class FanvueBrowser extends BaseBrowser {
       this.headers = await profileResp.request().allHeaders();
       this.profile = profileData.result?.data?.json;
       if (!this.profile.is_creator)
-        throw new BotError("not creator account", {
+        throw new AuthError("not creator account", {
           where: "FanvueBrowser::login",
           profile: JSON.stringify(profileData.result?.data?.json),
         })

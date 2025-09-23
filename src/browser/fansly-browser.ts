@@ -1,4 +1,4 @@
-import { BotError } from "../utils/error";
+import { AuthError, BotError, ProxyError } from "../utils/error";
 import { PostType } from "../types/constant";
 import { IFanslyAccount, IFanslyAlbumMediaResponse, IFanslyAlbumResponse, IFanslyGetHomePostResult, IFanslyMessageResult, IFanslyPost, IFanslyProfile, IFanslyStat } from "../types/fansly";
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
@@ -229,7 +229,7 @@ export class FanslyBrowser extends BaseBrowser {
       await this.page.goto("https://fansly.com", { timeout: 120000 });
       this.logger.info("open home page");
     } catch (error: any) {
-      throw new BotError("proxy blocked", {
+      throw new ProxyError("proxy blocked", {
         where: "FanslyBrowser::home",
         error: error.message,
         stack: error.stack,
@@ -266,7 +266,7 @@ export class FanslyBrowser extends BaseBrowser {
         const loginData = await loginResp.json();
         // check login credentials mismatch
         if (!loginData.success) {
-          throw new BotError("wrong credentials", {
+          throw new AuthError("wrong credentials", {
             where: "FanslyBrowser::login",
             url: "https://apiv3.fansly.com/api/v1/login?ngsw-bypass=true",
             response: await loginResp.text(),
@@ -276,14 +276,14 @@ export class FanslyBrowser extends BaseBrowser {
         if (loginData.response?.twofa) {
           const twoFaCode = twoFactor.generateToken(setting.device || "");
           if (twoFaCode?.token.length != 6)
-            throw new BotError("2fa auth failed", {
+            throw new AuthError("invalid security key", {
               where: "FanslyBrowser::login",
               error: "2fa code length is not 6",
               code: twoFaCode
             })
           const verification = twoFactor.verifyToken(setting.device || "", twoFaCode.token);
           if (verification?.delta != 0)
-            throw new BotError("2fa auth failed", {
+            throw new AuthError("invalid security key", {
               where: "FanslyBrowser::login",
               error: "2fa code verification failed",
               code: twoFaCode,
@@ -297,7 +297,7 @@ export class FanslyBrowser extends BaseBrowser {
           const twofaResp = await twofaPromise;
           const twofaData = await twofaResp.json();
           if (!twofaData?.success)
-            throw new BotError("invalid security key", {
+            throw new AuthError("invalid security key", {
               where: "FanslyBrowser::login",
               endpoint: "https://apiv3.fansly.com/api/v1/login/twofa?ngsw-bypass=true",
               status: twofaResp.statusText(),

@@ -4,7 +4,7 @@ import { IF2fApiResponse, IF2fChat, IF2fExplore, IF2fFeed, IF2fFolder, IF2fMedia
 import { IAccountID, IAccountSettings, IBotConfig, } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
-import { BotError } from "../utils/error";
+import { AuthError, BotError, ProxyError } from "../utils/error";
 
 interface IF2FPricingMedia {
   pk: number,
@@ -32,11 +32,10 @@ export class F2fBrowser extends BaseBrowser {
       await this.page.goto("https://f2f.com", { waitUntil: "domcontentloaded" });
       this.logger.info("open home page");
     } catch (error: any) {
-      throw new BotError("proxy blocked", {
+      throw new ProxyError("proxy blocked", {
         where: "F2fBrowser::home",
         error: error.message,
         stack: error.stack,
-        url: "https://f2f.com",
       });
     }
   }
@@ -63,7 +62,7 @@ export class F2fBrowser extends BaseBrowser {
       // check login api response
       const loginResp = await loginPromise;
       if (loginResp.status() != 200) {
-        throw new BotError("wrong credentials", {
+        throw new AuthError("wrong credentials", {
           where: "F2fBrowser::login",
           error: "login request failed",
           response: await loginResp.json(),
@@ -81,7 +80,7 @@ export class F2fBrowser extends BaseBrowser {
       const meData = await meResp.json();
       this.profile = meData;
       if (!meData.creator)
-        throw new BotError("not creator account", {
+        throw new AuthError("not creator account", {
           where: "F2fBrowser::login",
           error: "not creator account",
           response: await meResp.text(),
@@ -91,7 +90,7 @@ export class F2fBrowser extends BaseBrowser {
       if (error instanceof BotError) {
         throw error;
       } else {
-        throw new BotError("proxy blocked", {
+        throw new ProxyError("proxy blocked", {
           where: "F2fBrowser::login",
           error: error.message,
           stack: error.stack,

@@ -1,4 +1,4 @@
-import { BotError } from "../utils/error";
+import { AuthError, BotError, ProxyError } from "../utils/error";
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
@@ -29,11 +29,10 @@ export class FancentroBrowser extends BaseBrowser {
       await this.page.goto("https://fancentro.com", { waitUntil: "load", timeout: 60000 });
       this.logger.info("open home page");
     } catch (error: any) {
-      throw new BotError("proxy blocked", {
+      throw new ProxyError("proxy blocked", {
         where: "FancentroBrowser::home",
         error: error.message,
         stack: error.stack,
-        url: "https://fancentro.com",
       });
     }
   }
@@ -70,19 +69,19 @@ export class FancentroBrowser extends BaseBrowser {
       const respData = await authResp.json();
       const message = respData.message || "";
       if (message.includes("Invalid"))
-        throw new BotError("wrong credentials", {
+        throw new AuthError("wrong credentials", {
           where: "FancentroBrowser::login",
           error: "invalid email, password",
         });
       else if (message.includes("Captcha"))
         return "captcha"
       else if (message.includes("Something went wrong"))
-        throw new BotError("something went wrong", {
+        throw new AuthError("something went wrong", {
           where: "FancentroBrowser::getAuthResult",
           response: await authResp.text(),
         });
       else if (message.includes("Account disabled"))
-        throw new BotError("account blocked", {
+        throw new AuthError("account blocked", {
           where: "FancentroBrowser::getAuthResult",
           response: await authResp.text(),
         });
@@ -151,12 +150,12 @@ export class FancentroBrowser extends BaseBrowser {
       const profileData = await profileResp.json();
       this.profile = profileData;
       if (profileData.showCompleteProfileModal == 'NO_PURCHASES_USER')
-        throw new BotError("profile consent required", {
+        throw new AuthError("profile consent required", {
           where: "FancentroBrowser::login",
           profile: profileData
         });
       if (profileData.twoFactorAuthenticationStatus == 'inactive')
-        throw new BotError("two factor required", {
+        throw new AuthError("two factor required", {
           where: "FancentroBrowser::login",
           profile: profileData
         });
