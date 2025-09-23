@@ -1,10 +1,11 @@
 import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
-import { PostType } from "../types/constant";
+import { POST_LIMITED, PostType } from "../types/constant";
 import { IAccountID, IAccountSettings, IBotConfig, IChatMessage, IContent } from "../types/interface";
 import { IMaloumCategory, IMaloumChat, IMaloumEarning, IMaloumFolder, IMaloumMediaInfo, IMaloumPost } from "../types/maloum";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
 import moment from "moment";
+import { HttpStatusCode } from "axios";
 
 interface IMaloumTokenResponse {
   access_token: string,
@@ -43,8 +44,19 @@ export class MaloumBrowser extends BaseBrowser {
     }
   }
 
-  public async refreshToken(): Promise<void> {
-    await this.page.goto("https://app.maloum.com/", { timeout: 600000 });
+  public async refreshSession(): Promise<void> {
+    try {
+      const mePromise = this.page.waitForResponse("https://api.maloum.com/users/current");
+      await this.page.goto("https://app.maloum.com/", { timeout: 600000 });
+      const meResp = await mePromise;
+      this.headers = await meResp.request().allHeaders();
+    } catch (error: any) {
+      throw new BotError("refresh session failed", {
+        where: "MaloumBrowser::refreshSession",
+        error: error.message,
+        stack: error.stack,
+      })
+    }
   }
 
   // set content filter
@@ -93,11 +105,6 @@ export class MaloumBrowser extends BaseBrowser {
           status: loginResp.statusText(),
           response: await loginResp.text(),
         })
-      // await this.page.waitForTimeout(3000);
-      // input email and password again
-      // await this.page.locator("form input[name='identifier']").waitFor();
-      // await this.page.locator("form input[name='identifier']").first().fill(setting.email);
-      // await this.page.locator("form input[name='password']").first().fill(setting.password);
 
       // prepare wait login response
       const mePromise = this.page.waitForResponse("https://api.maloum.com/users/current");
@@ -128,7 +135,7 @@ export class MaloumBrowser extends BaseBrowser {
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
-      throw new AuthError("wrong credentials", {
+      throw new BotError("login failed", {
         where: "MaloumBrowser::login",
         error: error.message,
         stack: error.stack,
@@ -144,7 +151,11 @@ export class MaloumBrowser extends BaseBrowser {
         headers: this.headers,
         params: { limit: 15 }
       });
-      if (!resp.ok())
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::getFolder"
+          })
         throw new BotError("get folders failed", {
           where: "MaloumBrowser::getFolder",
           method: "GET",
@@ -152,6 +163,7 @@ export class MaloumBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: await resp.text()
         });
+      }
       const respData = await resp.json();
       const folders: IMaloumFolder[] = respData.data || [];
       folder = folders.find(item => item.name.toLowerCase() == folderName.toLowerCase());
@@ -160,7 +172,11 @@ export class MaloumBrowser extends BaseBrowser {
       const resp1 = await this.page.request.post("https://api.maloum.com/vault/folders",
         { headers: this.headers, data: { name: folderName } }
       );
-      if (!resp1.ok())
+      if (!resp1.ok()) {
+        if (resp1.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::getFolder"
+          })
         throw new BotError("create folder failed", {
           where: "MaloumBrowser::getFolder",
           method: "POST",
@@ -168,6 +184,7 @@ export class MaloumBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: await resp.text()
         });
+      }
       folder = await resp1.json();
       return folder;
     } catch (error: any) {
@@ -190,19 +207,18 @@ export class MaloumBrowser extends BaseBrowser {
         }
       );
       if (!resp.ok()) {
-        if (resp.status() == 401)
+        if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
             where: "MaloumBrowser::deleteFolder",
           });
-        else
-          throw new BotError("delete folder failed", {
-            where: "MaloumBrowser::deleteFolder",
-            method: "DELETE",
-            endpoint: `https://api.maloum.com/vault/folders/${folderId}`,
-            params: { deleteMedia: false },
-            status: resp.statusText(),
-            response: await resp.text(),
-          });
+        throw new BotError("delete folder failed", {
+          where: "MaloumBrowser::deleteFolder",
+          method: "DELETE",
+          endpoint: `https://api.maloum.com/vault/folders/${folderId}`,
+          params: { deleteMedia: false },
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
       }
     } catch (error: any) {
       if (error instanceof BotError)
@@ -225,19 +241,18 @@ export class MaloumBrowser extends BaseBrowser {
         params: { limit: 30 }
       });
       if (!resp.ok()) {
-        if (resp.status() == 401)
+        if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
             where: "MaloumBrowser::getSelfPosts",
           });
-        else
-          throw new BotError("get self posts failed", {
-            where: "MaloumBrowser::getSelfPosts",
-            method: "GET",
-            endpoint: "https://api.maloum.com/posts/me",
-            params: { limit: 30 },
-            status: resp.statusText(),
-            response: await resp.text(),
-          });
+        throw new BotError("get self posts failed", {
+          where: "MaloumBrowser::getSelfPosts",
+          method: "GET",
+          endpoint: "https://api.maloum.com/posts/me",
+          params: { limit: 30 },
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
       }
       const respData = await resp.json();
       next = respData.next;
@@ -250,6 +265,10 @@ export class MaloumBrowser extends BaseBrowser {
           params: { next, limit: 30 }
         });
         if (!respNext.ok()) {
+          if (respNext.status() == HttpStatusCode.Unauthorized)
+            throw new SessionTimeoutError("session timeout", {
+              where: "MaloumBrowser::getSelfPosts",
+            });
           throw new BotError("get self posts failed", {
             where: "MaloumBrowser::getSelfPosts",
             method: "GET",
@@ -285,19 +304,18 @@ export class MaloumBrowser extends BaseBrowser {
         params: { next: page * 30, limit: 30 }
       });
       if (!resp.ok()) {
-        if (resp.status() == 401)
+        if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
             where: "MaloumBrowser::getRecentPosts",
           });
-        else
-          throw new BotError("get recent posts failed", {
-            where: "MaloumBrowser::getRecentPosts",
-            method: "GET",
-            endpoint: "https://api.maloum.com/content/discovery",
-            params: { next: page * 30, limit: 30 },
-            status: resp.statusText(),
-            response: await resp.text(),
-          });
+        throw new BotError("get recent posts failed", {
+          where: "MaloumBrowser::getRecentPosts",
+          method: "GET",
+          endpoint: "https://api.maloum.com/content/discovery",
+          params: { next: page * 30, limit: 30 },
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
       }
       const respData = await resp.json();
       return respData.data
@@ -312,7 +330,6 @@ export class MaloumBrowser extends BaseBrowser {
     }
   }
 
-
   public async findMediaInFolder(folder: IMaloumFolder, mediaId: string): Promise<string | undefined> {
     try {
       const resp = await this.page.request.get(`https://api.maloum.com/vault/folders/${folder._id}/media`,
@@ -322,6 +339,10 @@ export class MaloumBrowser extends BaseBrowser {
         }
       );
       if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::findMediaInFolder",
+          });
         throw new BotError("find media failed", {
           where: "MaloumBrowser::findMediaInFolder",
           method: "GET",
@@ -351,10 +372,11 @@ export class MaloumBrowser extends BaseBrowser {
         { headers: this.headers }
       );
       if (!resp.ok()) {
-        if (resp.status() == 401) throw new SessionTimeoutError("session timeout", {
-          where: "MaloumBrowser::deletePost",
-        });
-        else throw new BotError("delete post failed", {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::deletePost",
+          });
+        throw new BotError("delete post failed", {
           where: "MaloumBrowser::deletePost",
           method: "DELETE",
           endpoint: `https://api.maloum.com/posts/${postId}`,
@@ -398,7 +420,6 @@ export class MaloumBrowser extends BaseBrowser {
       }
       const uploadData = await uploadResp.json();
       return uploadData.id
-
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -415,6 +436,10 @@ export class MaloumBrowser extends BaseBrowser {
       headers: this.headers
     })
     if (!resp.ok()) {
+      if (resp.status() == HttpStatusCode.Unauthorized)
+        throw new SessionTimeoutError("session timeout", {
+          where: "MaloumBrowser::getCategories",
+        });
       throw new BotError("get categories failed", {
         where: "MaloumBrowser::getCategories",
         method: "GET",
@@ -425,51 +450,6 @@ export class MaloumBrowser extends BaseBrowser {
     }
     const respData = await resp.json();
     return respData ? respData.filter((item: IMaloumCategory) => item.type == "POST" || item.type == "ALL") : [];
-  }
-
-  public async createPublicPost(content: IContent): Promise<IMaloumPost> {
-    try {
-      const categories = await this.getCategories();
-      const postTags = (content.postTags || []).map(tag => tag.toLowerCase());
-      postTags.push("public");
-      const cats = categories.filter(cat => postTags.includes(cat.name.toLowerCase())).map(cat => cat._id)
-      const resp = await this.page.request.post("https://api.maloum.com/posts", {
-        headers: this.headers,
-        data: {
-          caption: content.title,
-          categories: cats.slice(0, 3),
-          public: true,
-          mediaIds: [content.media[0].uuid]
-        }
-      });
-      if (!resp.ok()) {
-        if (resp.status() == 401)
-          throw new SessionTimeoutError("session timeout", {
-            where: "MaloumBrowser::createPublicPost",
-          });
-        else
-          throw new BotError("create post failed", {
-            where: "MaloumBrowser::createPublicPost",
-            error: resp.statusText(),
-            data: {
-              caption: content.title,
-              categories: cats.slice(0, 3),
-              public: true,
-              mediaIds: [content.media[0].uuid]
-            }
-          });
-      }
-      const respData = await resp.json();
-      return respData;
-    } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
-      throw new BotError("create post failed", {
-        where: "MaloumBrowser::createPublicPost",
-        error: error.message,
-        stack: error.stack,
-      });
-    }
   }
 
   public async followPost(postId: string): Promise<void> {
@@ -546,7 +526,7 @@ export class MaloumBrowser extends BaseBrowser {
       );
       const respData = await resp.json();
       if (!resp.ok()) {
-        if (resp.status() == 401)
+        if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
             where: "MaloumBrowser::getUnreadChats",
           });
@@ -597,7 +577,10 @@ export class MaloumBrowser extends BaseBrowser {
         data: params
       });
       if (!resp.ok()) {
-        if (resp.status() == 401)
+        if (resp.status() == HttpStatusCode.TooManyRequests) {
+          return POST_LIMITED;
+        }
+        if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
             where: "MaloumBrowser::schedulePost",
           });
@@ -643,24 +626,26 @@ export class MaloumBrowser extends BaseBrowser {
         }
       });
       if (!resp.ok()) {
-        if (resp.status() == 401)
+        if (resp.status() == HttpStatusCode.TooManyRequests)
+          return POST_LIMITED;
+        if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
             where: "MaloumBrowser::publishPost",
           });
-        else
-          throw new BotError("publish post failed", {
-            where: "MaloumBrowser::publishPost",
-            method: "POST",
-            endpoint: `https://api.maloum.com/posts`,
-            status: resp.statusText(),
-            response: await resp.text(),
-            params: {
-              caption: title,
-              categories: cats.slice(0, 3),
-              public: free,
-              mediaIds: [mediaId]
-            }
-          });
+
+        throw new BotError("publish post failed", {
+          where: "MaloumBrowser::publishPost",
+          method: "POST",
+          endpoint: `https://api.maloum.com/posts`,
+          status: resp.statusText(),
+          response: await resp.text(),
+          params: {
+            caption: title,
+            categories: cats.slice(0, 3),
+            public: free,
+            mediaIds: [mediaId]
+          }
+        });
       }
       const respData: IMaloumPost = await resp.json();
       return respData._id;
@@ -684,7 +669,11 @@ export class MaloumBrowser extends BaseBrowser {
         params: { limit: 15 },
       });
       let next;
-      if (!resp.ok())
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "MaloumBrowser::getMonthlyEarnings"
+          })
         throw new BotError("get earnings failed", {
           where: "MaloumBrowser::getMonthlyEarnings",
           method: "GET",
@@ -693,8 +682,8 @@ export class MaloumBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: await resp.text(),
         });
+      }
       const respData = await resp.json();
-      // console.log(respData);
       const items: IMaloumEarning[] = respData.data || [];
       next = respData.next;
       for (var item of items) {

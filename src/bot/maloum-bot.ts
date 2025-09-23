@@ -1,8 +1,9 @@
+import moment from "moment";
 import { MaloumBrowser } from "../browser/maloum-browser";
 import { PostApiService } from "../services/post-service";
-import { DEFAULT_LIVING_POSTS, ScheduleStatus } from "../types/constant";
-import { IBotConfig, IChatMessage, ICommentParams, IContent, IMedia, ISchedulePost, IScheduleResult } from "../types/interface";
-import { BotError } from "../utils/error";
+import { ActionType, DEFAULT_LIVING_POSTS, POST_LIMITED, PostResultType, ScheduleStatus } from "../types/constant";
+import { IBotConfig, ICommentParams, IContent, IMedia, ISchedulePost, IScheduleResult } from "../types/interface";
+import { BotError, SessionTimeoutError } from "../utils/error";
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
 
@@ -34,6 +35,7 @@ export class MaloumBot extends PostBot {
   }
 
   private async deleteOldPosts() {
+    let deleteIds = [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
@@ -41,7 +43,6 @@ export class MaloumBot extends PostBot {
       const postIds: string[] = await this.browser.getSelfPosts();
       const postsPublished = postIds.filter(postId => postRemains.includes(postId));
       this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`);
-      const deleteIds = [];
       while (postsPublished.length > postCount) {
         const postDeleting = postsPublished.pop()
         if (postDeleting) {
@@ -52,8 +53,10 @@ export class MaloumBot extends PostBot {
       }
       return deleteIds;
     } catch (error: any) {
+      if (error instanceof SessionTimeoutError)
+        await this.browser.refreshSession();
       this.logger.notifyError(error)
-      return []
+      return deleteIds;
     }
   }
 
@@ -72,15 +75,12 @@ export class MaloumBot extends PostBot {
     return mediaId
   }
 
-  private async createPublicPost(content: IContent, mediaId: string): Promise<string | undefined> {
-    const postId = await this.browser.publishPost(content.title, content.postTags, mediaId)
-    return postId;
-  }
-
   protected async doPost(): Promise<boolean> {
+    let postId;
+    let deleteIds: string[] = []
     if (!this.settings.params?.contents || this.settings.params.contents.length == 0) {
       this.logger.info(`account has no content to post`);
-      await this.service.updatePostSetting(true, undefined, []);
+      await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     }
     const contents = this.settings.params.contents;
@@ -90,29 +90,32 @@ export class MaloumBot extends PostBot {
     const content: IContent = contents[postIndex];
     const media = content.media[0];
     try {
-      await this.browser.refreshToken();
+      await this.browser.refreshSession();
+      deleteIds = await this.deleteOldPosts();
+      if (deleteIds.length > 0) {
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
+      }
       let folderName = content.folder;
       if (!folderName || folderName == "")
         folderName = "Posts";
       let mediaId = await this.getMedia(folderName, media)
       if (mediaId != media.uuid) {
-        await this.service.createHistory(`upload ${postIndex + 1}st media(${mediaId})`);
+        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media`, target: mediaId, description: media.name });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      const postId = await this.createPublicPost(content, mediaId)
-      if (postId) {
-        await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
+      const postId = await this.browser.publishPost(content.title, content.postTags, mediaId)
+      if (postId == POST_LIMITED) {
+        await this.service.createLog({ success: false, action: ActionType.POST, message: `limited to create ${postIndex + 1}st post`, description: content.title });
+        this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds, moment().add(1, "day").startOf("day").toDate());
+      } else {
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post`, description: content.title, target: postId });
+        this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds);
       }
-      const deleteIds = await this.deleteOldPosts();
-      if (deleteIds.length > 0) {
-        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
-      }
-      this.service.updatePostSetting(true, postId, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.updatePostSetting(true, undefined, []);
-      await this.service.createHistory(`create ${postIndex + 1}st post(${content.title}) failed`);
+      await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post`, description: content.title });
       return false;
     }
   }
@@ -124,22 +127,36 @@ export class MaloumBot extends PostBot {
       const params: ICommentParams = await this.service.updateCommentSetting();
       if (params.comments.length === 0)
         return true;
-      await this.browser.refreshToken();
+      await this.browser.refreshSession();
       let posts = await this.browser.getRecentPosts();
       posts = posts.reverse();
+      let success = false;
       for (post of posts) {
-        if (post.createdBy.username != this.config.alias && !params.block_users.includes(post.createdBy.username)) {
+        if (post.createdBy?.contentSettings?.canCreatorsComment && post.createdBy.username != this.config.alias && !params.block_users.includes(post.createdBy.username)) {
           await this.browser.followPost(post._id)
           const comment = this.pickup(params.comments);
           await this.browser.commentPost(post._id, comment);
-          await this.service.createHistory(`comment ${post.createdBy.username}'s post`);
+          await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `comment ${post.createdBy.username}'s post`, description: comment, target: post._id });
+          success = true;
+          break;
+        }
+      }
+      if (success)
+        return true;
+      for (post of posts) {
+        if (!post.createdBy?.contentSettings?.canCreatorsComment && post.createdBy.username != this.config.alias && !params.block_users.includes(post.createdBy.username)) {
+          await this.browser.followPost(post._id)
+          await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `follow ${post.createdBy.username}'s post`, target: post._id });
+          success = true;
           break;
         }
       }
       return true;
     } catch (error: any) {
       this.logger.notifyError(error)
-      await this.service.createHistory(`comment post failed`);
+      await this.service.createLog({ success: false, action: ActionType.COMMENT, message: "failed to create a comment" });
+      if (error instanceof SessionTimeoutError)
+        await this.browser.refreshSession();
       return false;
     }
   }
@@ -165,6 +182,8 @@ export class MaloumBot extends PostBot {
       return true;
     } catch (error) {
       this.logger.notifyError(error);
+      if (error instanceof SessionTimeoutError)
+        await this.browser.refreshSession();
       return true
     }
   }
@@ -174,7 +193,7 @@ export class MaloumBot extends PostBot {
       const revenue = await this.browser.getMonthlyEarnings();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createHistory(`bot closed due to no balance`);
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error: any) {
       this.logger.notifyError(error);
@@ -202,13 +221,12 @@ export class MaloumBot extends PostBot {
     const schedule = post.schedule;
     try {
       const mediaId = await this.getMedia(schedule.folder, schedule.media);
-      await this.service.createHistory(`upload media(${mediaId}, ${schedule.media.name}) for schedule post(${schedule.title})`);
       const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaId, schedule.type)
-      await this.service.createHistory(`create scheduled post(${postId}, ${schedule.title})`);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create scheduled post`, target: postId, description: schedule.title });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createHistory(`create scheduled post(${schedule.title}) failed`);
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create scheduled post`, description: schedule.title });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
     }
   }

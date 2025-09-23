@@ -7,6 +7,9 @@ export interface IMaloumUser {
   _id: string,
   username: string,
   isCreator: boolean,
+  contentSettings: {
+    canCreatorsComment: boolean,
+  }
 }
 
 export interface IMaloumPost {
