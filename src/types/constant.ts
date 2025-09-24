@@ -71,6 +71,8 @@ export const PostResultType = {
 
 export const F2F_PRICE_MIN = 5;
 
+export const EUROTOUSD = 1.18;
+
 export const ActionType = {
   LOGIN: 0,
   UPDATE: 1,

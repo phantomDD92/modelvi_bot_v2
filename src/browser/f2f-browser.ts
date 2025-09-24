@@ -1,10 +1,11 @@
 import moment from "moment";
-import { F2F_PRICE_MIN, F2FStoryType, PostType } from "../types/constant";
-import { IF2fApiResponse, IF2fChat, IF2fExplore, IF2fFeed, IF2fFolder, IF2fMedia, IF2fMessage, IF2fPost, IF2fProfile, IF2FRevenue as IF2fRevenue, IF2fStory as IF2fStories } from "../types/f2f";
+import { EUROTOUSD as EURO_TO_USD, F2F_PRICE_MIN, F2FStoryType, PostType } from "../types/constant";
+import {  IF2fChat, IF2fExplore, IF2fFolder, IF2fMedia, IF2fMessage, IF2fPost, IF2fProfile, IF2FRevenue, IF2fStory } from "../types/f2f";
 import { IAccountID, IAccountSettings, IBotConfig, } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
 import { AuthError, BotError, ProxyError } from "../utils/error";
+import { HttpStatusCode } from "axios";
 
 interface IF2FPricingMedia {
   pk: number,
@@ -29,7 +30,7 @@ export class F2fBrowser extends BaseBrowser {
   // browser action for home page
   public async home(): Promise<void> {
     try {
-      await this.page.goto("https://f2f.com", { waitUntil: "domcontentloaded" });
+      await this.page.goto("https://f2f.com", { waitUntil: "domcontentloaded", timeout: 120000 });
       this.logger.info("open home page");
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
@@ -43,7 +44,7 @@ export class F2fBrowser extends BaseBrowser {
   // browser action for login
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
     try {
-      await this.page.goto("https://f2f.com/login/");
+      await this.page.goto("https://f2f.com/login/", { timeout: 120000 });
 
       // input login credentials
       await this.page.locator('input[name="username"]').fill(setting.email);
@@ -87,32 +88,16 @@ export class F2fBrowser extends BaseBrowser {
         })
       return { alias: meData.username, id: meData.username };
     } catch (error: any) {
-      if (error instanceof BotError) {
+      if (error instanceof BotError)
         throw error;
-      } else {
-        throw new ProxyError("proxy blocked", {
-          where: "F2fBrowser::login",
-          error: error.message,
-          stack: error.stack,
-        });
-      }
+      throw new BotError("login failed", {
+        where: "F2fBrowser::login",
+        error: error.message,
+        stack: error.stack,
+      });
     }
   }
 
-  // // get api result
-  // private async getApiResult(url: string): Promise<IF2fApiResponse | undefined> {
-  //   const headers = this.headers;
-  //   const resp = await this.page.request.get(url, { headers: headers });
-  //   if (!resp.ok())
-  //     throw new BotError("get api result failed", {
-  //       where: "F2fBrowser::getApiResult",
-  //       error: "bad response",
-  //       path: url,
-  //       status: resp.statusText()
-  //     });
-  //   const data = await resp.json();
-  //   return data;
-  // }
 
   // get folders media
   public async findMediaInFolder(folderId: string, mediaId: string): Promise<string | undefined> {
@@ -244,19 +229,6 @@ export class F2fBrowser extends BaseBrowser {
       })
     }
   }
-
-  // public async getFeeds(): Promise<IF2fFeed[]> {
-  //   let posts: IF2fFeed[] = [];
-  //   let resp = await this.getApiResult(`https://f2f.com/api/feed/`);
-  //   if (resp && resp.results)
-  //     posts.push(...resp.results);
-  //   while (resp && resp.next) {
-  //     resp = await this.getApiResult(resp.next);
-  //     if (resp && resp.results)
-  //       posts.push(...resp.results);
-  //   }
-  //   return posts;
-  // }
 
   public async getSelfPosts(): Promise<string[]> {
     let postIds: string[] = [];
@@ -604,58 +576,6 @@ export class F2fBrowser extends BaseBrowser {
     }
   }
 
-  // public async createPost(content: IContent): Promise<string | undefined> {
-  //   const headers = this.headers;
-  //   // create post
-  //   let resp = await this.page.request.post(
-  //     "https://f2f.com/api/posts/",
-  //     { headers: headers, data: { media: [content.media[0].uuid] } });
-  //   if (!resp.ok()) {
-  //     throw new BotError("create post failed", {
-  //       where: "F2fBrowser::createPost",
-  //       path: "https://f2f.com/api/posts",
-  //       status: resp.statusText(),
-  //       response: await resp.json()
-  //     });
-  //   }
-  //   const { uuid } = await resp.json();
-
-  //   // change post title and tags
-  //   let tagStr = content.postTags.map(tag => `#[${tag}]`).join(" ");
-  //   tagStr = tagStr.toLowerCase();
-  //   const text = `${content.title}\n\n${tagStr}`;
-  //   const resp1 = await this.page.request.patch(
-  //     `https://f2f.com/api/posts/${uuid}/`,
-  //     { headers, data: { content: text } });
-  //   if (!resp1.ok()) {
-  //     const { prohibited } = await resp1.json();
-  //     if (prohibited)
-  //       return POST_PROHIBITED;
-  //     throw new BotError("set post title failed", {
-  //       where: "F2fBrowser::createPost",
-  //       path: `https://f2f.com/api/posts/${uuid}/`,
-  //       status: resp1.statusText(),
-  //       response: await resp1.json()
-  //     });
-  //   }
-
-  //   // publish post
-  //   const resp2 = await this.page.request.patch(
-  //     `https://f2f.com/api/posts/${uuid}/publish`,
-  //     { headers, data: { now: true } });
-  //   if (!resp2.ok()) {
-  //     const data2 = await resp2.json();
-  //     if (data2.error && data2.error[0] === "reached-post-limit")
-  //       return POST_LIMITED;
-  //     throw new BotError("publish post failed", {
-  //       where: "F2fBrowser::createPost",
-  //       path: `https://f2f.com/api/posts/${uuid}/publish`,
-  //       status: resp2.statusText(),
-  //       response: await resp2.json()
-  //     });
-  //   }
-  //   return uuid;
-  // }
 
   public async gotoHome(): Promise<void> {
     try {
@@ -702,37 +622,40 @@ export class F2fBrowser extends BaseBrowser {
     }
   }
 
-  // // get profile
-  // public async getProfile(): Promise<IF2fProfile> {
-  //   const resp = await this.page.request.get(
-  //     `https://f2f.com/api/users/me/`,
-  //     { headers: this.headers });
-  //   if (!resp.ok())
-  //     throw new BotError("get profile failed", {
-  //       where: "F2fBrowser::getProfile",
-  //       path: "https://f2f.com/api/users/me/",
-  //       error: "bad response",
-  //       response: await resp.json(),
-  //       status: resp.statusText(),
-  //     });
-  //   const profile = await resp.json();
-  //   return profile;
-  // }
-
-  // get revenue
-  public async getDetailedRevenue(): Promise<IF2fRevenue[]> {
-    const response = await this.page.request.get(
-      "https://f2f.com/api/statistics/performance/detailedrevenue/",
-      { headers: this.headers }
-    );
-    const responseData = await response.json();
-    if (!response.ok())
-      throw new BotError("get detailed revenue failed", {
-        where: "F2fBrowser::getDetailedRevenue",
-        path: "https://f2f.com/api/statistics/performance/detailedrevenue/",
-        response: responseData,
+  public async getMonthlyEarnings(): Promise<number> {
+    try {
+      const resp = await this.page.request.get(
+        "https://f2f.com/api/statistics/performance/detailedrevenue/",
+        { headers: this.headers }
+      );
+      const respData = await resp.json();
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.NotFound)
+          return 0;
+        throw new BotError("get detailed revenue failed", {
+          where: "F2fBrowser::getMonthlyEarnings",
+          method: "GET",
+          endpoint: "https://f2f.com/api/statistics/performance/detailedrevenue/",
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
+      const transactions: IF2FRevenue[] = respData;
+      const items = transactions.filter(item => moment().diff(moment(item.date), "days") <= 30)
+      let revenue = 0
+      for (let item of items) {
+        revenue += (item.message_revenue + item.post_revenue + item.referral_revenue + item.subscription_revenue + item.tip_revenue)
+      }
+      return revenue * EURO_TO_USD;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("get earnings failed", {
+        where: "F2fBrowser::getMonthlyEarnings",
+        error: error.message,
+        stack: error.stack,
       })
-    return responseData;
+    }
   }
 
   public async getChats(): Promise<IF2fChat[]> {

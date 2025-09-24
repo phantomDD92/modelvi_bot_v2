@@ -95,7 +95,7 @@ export abstract class BaseBrowser {
       // go to google home page
       await this.page.goto("https://www.google.com", { waitUntil: "domcontentloaded" });
     } catch (error: any) {
-      throw new ProxyError("invalid proxy", {
+      throw new ProxyError("proxy blocked", {
         where: 'BaseBrowser::checkProxy',
         error: error.message,
         stack: error.stack,

@@ -29,16 +29,6 @@ export class FancentroBot extends PostBot {
 
   protected async initAccount(): Promise<void> {
     await super.initAccount();
-    // // check account proxy
-    // const proxyAddr = await this.service.pickProxy();
-    // const proxy = this.parseProxy(proxyAddr);
-    // if (!proxy) {
-    //   throw new BotError("invalid proxy", {
-    //     where: "FancentroBot::initAccount",
-    //     error: "no proxy"
-    //   });
-    // }
-    // this.proxy = proxy;
     this.logger.info("init account success");
   }
 
