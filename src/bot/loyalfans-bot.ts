@@ -117,11 +117,11 @@ export class LoyalFansBot extends PostBot {
       const mediaId = await this.getMedia(content.folder, media.name, media.uuid);
       if (media.uuid != mediaId) {
         await this.service.updateContentMedia(postIndex, mediaId);
-        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media`, target: mediaId, description: media.name });
+        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
       }
       // create a post
       await this.browser.schedulePost(moment().toDate(), content.title, content.postTags, mediaId);
-      await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post`, description: content.title })
+      await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})` })
       deleteIds = await this.removePosts();
       if (deleteIds.length > 0) {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
@@ -131,7 +131,7 @@ export class LoyalFansBot extends PostBot {
     } catch (error: any) {
       this.logger.notifyError(error);
       await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
-      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post` });
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
       return false;
     }
   }
@@ -141,11 +141,11 @@ export class LoyalFansBot extends PostBot {
     try {
       const mediaId = await this.getMedia(schedule.folder, schedule.media.name);
       await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaId, schedule.type, schedule.price);
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create scheduled post`, description: schedule.title });
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, post: undefined, status: ScheduleStatus.SCHEDULED });
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create scheduled post`, description: schedule.title });
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" });
     }
   }

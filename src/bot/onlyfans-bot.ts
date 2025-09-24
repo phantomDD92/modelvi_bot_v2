@@ -78,11 +78,11 @@ export class OnlyFansBot extends PostBot {
     try {
       const media = await this.downloadFile(schedule.media.name)
       const postId = await this.browser.schedulePost(media, new Date(schedule.scheduledAt), schedule.title, schedule.type, schedule.price)
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create scheduled post`, description: schedule.title, target: postId });
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create scheduled post`, description: schedule.title });
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
     }
   }

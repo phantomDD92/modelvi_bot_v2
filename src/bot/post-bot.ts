@@ -9,7 +9,7 @@ import axios from "axios";
 import { BaseBrowser } from "../browser/base-browser";
 import { PostApiService } from "../services/post-service";
 import { IAccountSettings, IBotConfig, IChatMessage, IProxy } from "../types/interface";
-import { ActionType, MAX_ERROR_COUNT } from "../types/constant";
+import { ActionType, MAX_ERROR_COUNT, PostResultType } from "../types/constant";
 import { Logger } from "../utils/logger";
 import { getPlatformName } from "../utils/helper";
 import { BaseBot } from './base-bot';
@@ -207,7 +207,7 @@ export abstract class PostBot extends BaseBot {
 
   protected async doPost(): Promise<boolean> {
     this.logger.info("process post success");
-    await this.service.updatePostSetting(true, undefined, []);
+    await this.service.updatePostResult(PostResultType.SUCCESS, undefined, []);
     return true;
   }
 
@@ -230,7 +230,7 @@ export abstract class PostBot extends BaseBot {
     try {
       const available = await this.service.checkBalance(0);
       if (!available)
-        await this.service.createHistory(`bot closed due to no balance`);
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
       return available;
     } catch (error: any) {
       this.logger.notifyError(error);

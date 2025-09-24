@@ -1,6 +1,6 @@
 import { FanslyBrowser } from '../browser/fansly-browser';
 import { FanslyService } from '../services/fansly-service';
-import { ActionType, DEFAULT_LIVING_POSTS, PostType, ScheduleStatus } from '../types/constant';
+import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, PostType, ScheduleStatus } from '../types/constant';
 import { IFanslyMedia } from '../types/fansly';
 import { IBotConfig, IChatMessage, IContent, IMedia, ISchedulePost, IScheduleResult } from '../types/interface';
 import { BotError } from '../utils/error';
@@ -92,7 +92,7 @@ export class FanslyBot extends PostBot {
     let album = albums.find(el => el.title === folderName);
     if (!album) {
       album = await this.browser.createAlbum(folderName);
-      await this.service.createHistory(`create album(title=${folderName}, id=${album?.id})`);
+      this.logger.info(`create album(${folderName})`);
     }
     if (!album)
       throw new BotError("create album failed");
@@ -142,38 +142,36 @@ export class FanslyBot extends PostBot {
       const media = content.media[0]
       const preview = content.preview;
       if (!media.name) {
-        await this.service.updatePostSetting(true, undefined, []);
-        this.logger.info(`skip ${postIndex + 1}st post(${content.title}) due to media absence`);
-        await this.service.createHistory(`skip ${postIndex + 1}st post(${content.title}) due to media absence`);
-        return true
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, []);
+        await this.service.createLog({ success: false, action: ActionType.POST, message: `skip to create ${postIndex + 1}st post(${content.title})` });
+        return true;
       }
       const mediaId = await this.getMedia(content.folder, media);
       if (mediaId != media.uuid) {
         await this.service.updateContentMedia(postIndex, mediaId);
-        await this.service.createHistory(`upload media(${mediaId}) for ${postIndex + 1}st post`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
       }
       let previewId;
       if (preview && preview.name) {
         previewId = await this.getMedia(content.folder, preview);
         if (previewId != preview.uuid) {
           await this.service.updateContentPreview(postIndex, previewId);
-          await this.service.createHistory(`upload preview(${previewId}) for ${postIndex + 1}st post`);
+          await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st preview(${content.title})`, target: previewId });
         }
       }
       // create post
       const postId = await this.createPublishPost(content, mediaId, previewId)
-      await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
+      await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
       // if needs, delete articles
       deleteIds = await this.removePosts();
       if (deleteIds.length > 0)
-        await this.service.createHistory(`delete ${deleteIds.length} posts(${deleteIds.join(", ")})`);
-      await this.service.updatePostSetting(true, postId, deleteIds);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
+      await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     } catch (error: any) {
-      this.logger.warn(`create ${postIndex + 1}st post failed`);
       this.logger.notifyError(error);
-      await this.service.updatePostSetting(true, undefined, deleteIds);
-      await this.service.createHistory(`create ${postIndex + 1}st post failed`);
+      await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post` });
       return false;
     }
   }
@@ -255,21 +253,20 @@ export class FanslyBot extends PostBot {
     const schedule = post.schedule;
     try {
       const mediaId = await this.getMedia(schedule.folder, schedule.media);
-      await this.service.createHistory(`upload media(${mediaId}) for schedule post(${schedule.title})`);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload schedule media(${schedule.title})` });
       let previewId;
       if (schedule.preview && schedule.preview.name) {
         previewId = await this.getMedia(schedule.folder, schedule.preview);
-        await this.service.createHistory(`upload preview(${previewId}) for schedule post(${schedule.title})`);
+        await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload schedule preview(${schedule.title})` });
       }
       const contentId = await this.browser.createContent(mediaId, schedule.type, schedule.price, previewId);
       this.logger.info(`create content(${contentId}) for scheduled post`);
       const postId = await this.browser.schedulePost(schedule.title, schedule.tags, contentId, new Date(schedule.scheduledAt));
-      this.logger.info(`schedule post(${postId}, ${schedule.title})`);
-      await this.service.createHistory(`create scheduled post(${postId}, ${schedule.title})`);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createHistory(`create scheduled post(${schedule.title}) failed`);
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
     }
   }

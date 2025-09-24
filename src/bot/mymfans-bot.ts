@@ -105,9 +105,8 @@ export class MymFansBot extends PostBot {
         await this.service.createLog({
           success: true,
           action: ActionType.POST,
-          message: `create ${postIndex + 1}st post`,
+          message: `create ${postIndex + 1}st post(${content.title})`,
           target: postId,
-          description: content.title,
         });
         this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       } else {
@@ -115,7 +114,7 @@ export class MymFansBot extends PostBot {
         this.logger.info(`download ${postIndex + 1}st media.`)
         const { media: media1, post, scheduledAt } = await this.browser.createPublicPost(content.title, mediaPath);
         if (post == POST_PROHIBITED) {
-          await this.service.createLog({ success: true, action: ActionType.POST, message: `skip ${postIndex + 1}st post`, description: content.title, });
+          await this.service.createLog({ success: true, action: ActionType.POST, message: `prohibited to create ${postIndex + 1}st post(${content.title})` });
           this.service.updatePostResult(PostResultType.PROHIBITED, undefined, deleteIds);
           return true;
         }
@@ -126,14 +125,13 @@ export class MymFansBot extends PostBot {
           await this.service.createLog({
             success: true,
             action: ActionType.POST,
-            message: `schedule ${postIndex + 1}st post`,
-            description: content.title,
+            message: `schedule ${postIndex + 1}st post(${content.title})`,
             target: postId,
             time: new Date(scheduledAt),
           });
           this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds, new Date(scheduledAt));
         } else {
-          await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post`, description: content.title, target: postId, });
+          await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId, });
           this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
         }
       }
@@ -144,7 +142,7 @@ export class MymFansBot extends PostBot {
         throw error;
       this.logger.notifyError(error);
       await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
-      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post`, description: content.title, notified: true });
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})`, notified: true });
       return false;
     }
   }

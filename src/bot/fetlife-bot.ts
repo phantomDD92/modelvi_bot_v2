@@ -1,6 +1,6 @@
 import { FetLifeBrowser } from '../browser/fetlife-browser';
 import { PostApiService } from '../services/post-service';
-import { DEFAULT_LIVING_POSTS } from '../types/constant';
+import { ActionType, DEFAULT_LIVING_POSTS, PostResultType } from '../types/constant';
 import { IBotConfig, IContent } from '../types/interface';
 import { Logger } from '../utils/logger';
 import { PostBot } from './post-bot';
@@ -105,8 +105,8 @@ export class FetLifeBot extends PostBot {
     const content: IContent = contents[postIndex];
     const media = content.media[0]
     if (content.mode != "image") {
-      await this.service.createHistory(`skip ${postIndex + 1}st post`);
-      await this.service.updatePostSetting(true, undefined, []);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `skip to upload ${postIndex + 1}st media(${content.title})` });
+      await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, []);
       return true;
     }
     try {
@@ -114,17 +114,17 @@ export class FetLifeBot extends PostBot {
       const imagePath = await this.downloadFile(media.name);
       // create a post
       const postId = await this.browser.createPostWithImage(imagePath, content.title, content.postTags);
-      await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
+      await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
       const deleteIds = await this.removePosts();
       if (deleteIds.length > 0) {
-        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
       }
-      await this.service.updatePostSetting(true, postId, deleteIds);
+      await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.updatePostSetting(true, undefined, []);
-      await this.service.createHistory(`create ${postIndex + 1}st post failed`);
+      await this.service.updatePostResult(PostResultType.FAILED, undefined, []);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
       return false;
     }
   }

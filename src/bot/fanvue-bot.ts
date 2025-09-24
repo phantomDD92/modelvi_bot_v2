@@ -5,7 +5,7 @@ import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from "..
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
 import { BotError } from '../utils/error';
-import { ActionType, DEFAULT_LIVING_POSTS as DEFAULT_LIVING_POSTS, ScheduleStatus } from "../types/constant";
+import { ActionType, DEFAULT_LIVING_POSTS as DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from "../types/constant";
 
 export class FanvueBot extends PostBot {
   protected browser!: FanvueBrowser;
@@ -37,7 +37,7 @@ export class FanvueBot extends PostBot {
     const folders = await this.browser.getFolders();
     if (!folders.includes(folderName)) {
       await this.browser.createFolder(folderName);
-      await this.service.createHistory(`create folder(${folderName})`);
+      this.logger.info(`create folder(${folderName})`);
     }
   }
 
@@ -98,7 +98,7 @@ export class FanvueBot extends PostBot {
   protected async doPost(): Promise<boolean> {
     if (!this.settings.params?.contents || this.settings.params.contents.length == 0) {
       this.logger.info(`account has no content to post`);
-      await this.service.updatePostSetting(true, undefined, []);
+      await this.service.updatePostResult(PostResultType.SUCCESS, undefined, []);
       return true;
     }
     const contents = this.settings.params.contents;
@@ -113,23 +113,24 @@ export class FanvueBot extends PostBot {
         folderName = "Posts";
       let mediaId = await this.getMedia(folderName, media)
       if (mediaId != media.uuid) {
-        await this.service.createHistory(`upload ${postIndex + 1}st media(${mediaId})`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
       const postId = await this.browser.createPost(content.title, mediaId);
       if (postId) {
-        await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
       }
       const deleteIds = await this.deleteOldPosts();
       if (deleteIds.length > 0) {
-        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
       }
-      this.service.updatePostSetting(true, postId, deleteIds);
+      this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.updatePostSetting(true, undefined, []);
-      await this.service.createHistory(`create ${postIndex + 1}st post(${content.title}) failed`);
+      await this.service.updatePostResult(PostResultType.FAILED, undefined, []);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
+
       return false;
     }
   }
@@ -154,13 +155,14 @@ export class FanvueBot extends PostBot {
     const schedule = post.schedule;
     try {
       const mediaId = await this.getMedia(schedule.folder, schedule.media);
-      await this.service.createHistory(`upload media(${mediaId}, ${schedule.media.name}) for schedule post(${schedule.title})`);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload schedule media(${schedule.title})`, target: mediaId });
+
       const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, mediaId, schedule.type, schedule.price)
-      await this.service.createHistory(`create scheduled post(${postId}, ${schedule.title})`);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createHistory(`create scheduled post(${schedule.title}) failed`);
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
     }
   }

@@ -100,22 +100,22 @@ export class MaloumBot extends PostBot {
         folderName = "Posts";
       let mediaId = await this.getMedia(folderName, media)
       if (mediaId != media.uuid) {
-        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media`, target: mediaId, description: media.name });
+        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
       const postId = await this.browser.publishPost(content.title, content.postTags, mediaId)
       if (postId == POST_LIMITED) {
-        await this.service.createLog({ success: false, action: ActionType.POST, message: `limited to create ${postIndex + 1}st post`, description: content.title });
+        await this.service.createLog({ success: false, action: ActionType.POST, message: `limited to create ${postIndex + 1}st post(${content.title})` });
         this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds, moment().add(1, "day").startOf("day").toDate());
       } else {
-        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post`, description: content.title, target: postId });
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
         this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds);
       }
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
       await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
-      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post`, description: content.title });
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
       return false;
     }
   }
@@ -136,7 +136,7 @@ export class MaloumBot extends PostBot {
           await this.browser.followPost(post._id)
           const comment = this.pickup(params.comments);
           await this.browser.commentPost(post._id, comment);
-          await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `comment ${post.createdBy.username}'s post`, description: comment, target: post._id });
+          await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `comment ${post.createdBy.username}'s post`, target: post._id });
           success = true;
           break;
         }
@@ -222,11 +222,11 @@ export class MaloumBot extends PostBot {
     try {
       const mediaId = await this.getMedia(schedule.folder, schedule.media);
       const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaId, schedule.type)
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create scheduled post`, target: postId, description: schedule.title });
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create scheduled post`, description: schedule.title });
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
     }
   }

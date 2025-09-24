@@ -2,7 +2,7 @@ import moment from 'moment';
 import { FancentroBrowser } from '../browser/fancentro-browser';
 import { PostBot } from './post-bot';
 import { IBotConfig, IContent, ISchedulePost, IScheduleResult } from '../types/interface';
-import { ActionType, DEFAULT_LIVING_POSTS, ScheduleStatus } from '../types/constant';
+import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from '../types/constant';
 import { PostApiService } from '../services/post-service';
 import { Logger } from '../utils/logger';
 
@@ -75,35 +75,36 @@ export class FancentroBot extends PostBot {
       postIndex = 0;
     const content: IContent = contents[postIndex];
     const media = content.media[0]
-    if (media.mode.includes("heic")) {
-      await this.service.createHistory(`skip ${postIndex + 1}st post`);
-      await this.service.updatePostSetting(true, undefined, []);
-      return true;
-    }
+    let deleteIds: string[] = []
     try {
+      if (media.mode.includes("heic")) {
+        await this.service.createLog({ success: false, action: ActionType.POST, message: `skip to upload ${postIndex + 1}st media(${content.title})` });
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, []);
+        return true;
+      }
       // const folderId = await this.browser.findOrCreateFolder(content.folder);
       // open content media
       // const mediaId = await this.browser.getVault(folderId, media.name, media.uuid);
       const mediaId = await this.browser.getVault(0, media.name, media.uuid);
       if (media.uuid != mediaId) {
         await this.service.updateContentMedia(postIndex, mediaId);
-        await this.service.createHistory(`upload ${postIndex + 1}st media`);
+        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
       }
       // create a post
       const postId = await this.browser.schedulePost(moment().add(1, "day").toDate(), mediaId, content.title, content.postTags);
       if (postId) {
-        await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
       }
-      const deleteIds = await this.removePosts();
+      deleteIds = await this.removePosts();
       if (deleteIds.length > 0) {
-        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
       }
-      await this.service.updatePostSetting(true, postId, deleteIds);
+      await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.updatePostSetting(true, undefined, []);
-      await this.service.createHistory(`create ${postIndex + 1}st post failed`);
+      await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
       return false;
     }
   }
@@ -131,14 +132,12 @@ export class FancentroBot extends PostBot {
       // open content media
       // const mediaId = await this.browser.getVault(folderId, schedule.media.name, schedule.media.uuid);
       const mediaId = await this.browser.getVault(0, schedule.media.name, schedule.media.uuid);
-      await this.service.createHistory(`upload media(${mediaId}) for schedule post(${schedule.title})`);
       const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), mediaId, schedule.title, schedule.tags, schedule.type, schedule.price);
-      this.logger.info(`schedule post(${postId}, ${schedule.title})`);
-      await this.service.createHistory(`create scheduled post(${postId}, ${schedule.title})`);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createHistory(`create scheduled post(${schedule.title}) failed`);
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
     }
   }

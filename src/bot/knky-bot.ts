@@ -1,6 +1,6 @@
 import { KnkyBrowser } from "../browser/knky-browser";
 import { PostApiService } from "../services/post-service";
-import { ActionType, DEFAULT_LIVING_POSTS, DEFAULT_STORY_MAX_COUNT, KnkyStoryType, ScheduleStatus } from "../types/constant";
+import { ActionType, DEFAULT_LIVING_POSTS, DEFAULT_STORY_MAX_COUNT, KnkyStoryType, PostResultType, ScheduleStatus } from "../types/constant";
 import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
@@ -72,7 +72,7 @@ export class KnKyBot extends PostBot {
       // if needs, delete articles
       const deleteIds = await this.deleteOldPosts();
       if (deleteIds.length > 0) {
-        await this.service.createHistory(`delete ${deleteIds.length} old posts`);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
       }
       // download media
       const path = await this.downloadFile(media.name);
@@ -80,11 +80,11 @@ export class KnKyBot extends PostBot {
       // create post
       const postId = await this.browser.createPost(content, path);
       if (postId == "disabled") {
-        await this.service.createHistory(`skip ${postIndex + 1}st post(${content.title})`);
-        await this.service.updatePostSetting(true, undefined, deleteIds);
+        await this.service.createLog({ success: false, action: ActionType.POST, message: `skip to create ${postIndex + 1}st post(${content.title})` });
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, deleteIds);
       } else {
-        await this.service.createHistory(`create ${postIndex + 1}st post(${postId}, ${content.title})`);
-        await this.service.updatePostSetting(true, postId, deleteIds);
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
+        await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       }
       // await this.browser.refreshToken();
       return true;
@@ -95,8 +95,8 @@ export class KnKyBot extends PostBot {
         return true;
       }
       this.logger.notifyError(error);
-      await this.service.updatePostSetting(true, undefined, []);
-      await this.service.createHistory(`create ${postIndex + 1}st post failed`);
+      await this.service.updatePostResult(PostResultType.FAILED, undefined, []);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
       return false;
     }
   }
@@ -121,7 +121,7 @@ export class KnKyBot extends PostBot {
         }
       }
       if (countDeleted > 0) {
-        await this.service.createHistory(`delete ${countDeleted} old stories`);
+        await this.service.createLog({ success: true, action: ActionType.STORY, message: `delete ${countDeleted} stories` });
       }
       // find next story content
       if (storyIndex >= contents.length)
@@ -147,7 +147,7 @@ export class KnKyBot extends PostBot {
       this.logger.info(`download ${storyIndex + 1}th media(${media.name}) for story`);
       // create post
       await this.browser.createStory(content, path);
-      await this.service.createHistory(`create a story with ${storyIndex + 1}th content`);
+      await this.service.createLog({ success: true, action: ActionType.STORY, message: `create ${storyIndex + 1}th story` });
       await this.service.updateStorySetting(storyIndex)
       return true;
     } catch (error: any) {
@@ -157,7 +157,7 @@ export class KnKyBot extends PostBot {
         return true;
       }
       this.logger.notifyError(error);
-      await this.service.createHistory(`create story failed with ${storyIndex + 1}th content`);
+      await this.service.createLog({ success: false, action: ActionType.STORY, message: `failed to create ${storyIndex + 1}th story` });
       await this.service.updateStorySetting(storyIndex);
       return false;
 
@@ -203,15 +203,15 @@ export class KnKyBot extends PostBot {
       // create post
       const postId = await this.browser.schedulePost(post, path);
       if (postId == "disabled") {
-        await this.service.createHistory(`disable scheduled post(${schedule.title})`);
+        await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `prohibited to create schedule post(${schedule.title})` });
         await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.FAILED })
         return;
       }
-      await this.service.createHistory(`create scheduled post(${postId}, ${schedule.title})`);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createHistory(`create scheduled post(${schedule.title}) failed`);
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
     }
   }
