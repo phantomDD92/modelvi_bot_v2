@@ -38,13 +38,6 @@ export class FanslyBot extends PostBot {
     //   });
     // }
     // this.proxy = proxy;
-    // check device id
-    if (!this.settings.device) {
-      throw new BotError("no security key", {
-        where: "FanslyBot::initAccount",
-        error: "there is no security key for the account"
-      });
-    }
     this.logger.info("init account success");
   }
 

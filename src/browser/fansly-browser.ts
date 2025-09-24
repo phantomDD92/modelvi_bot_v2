@@ -244,7 +244,11 @@ export class FanslyBrowser extends BaseBrowser {
 
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
     try {
-
+      if (!setting.device) {
+        throw new AuthError("no security key", {
+          where: "FanslyBrowser::login"
+        });
+      }
       // open login modal
       await this.page.locator("div.right-content > div.btn", { hasText: "Login" }).waitFor({ timeout: 600000 })
       await this.page.locator("div.right-content > div.btn", { hasText: "Login" }).first().click();
