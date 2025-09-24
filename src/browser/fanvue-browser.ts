@@ -101,7 +101,7 @@ export class FanvueBrowser extends BaseBrowser {
       const profileResp = await profilePromise;
       const profileData = await profileResp.json();
       if (profileResp.status() != 200) {
-        throw new BotError("wrong credentials", {
+        throw new AuthError("wrong credentials", {
           where: "FanvueBrowser::login",
           method: "GET",
           endpoint: "https://www.fanvue.com/trpc/user.getOwnProfile",

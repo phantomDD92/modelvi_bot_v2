@@ -1,6 +1,6 @@
 import moment from "moment";
 import CryptoJS from 'crypto-js';
-import { BotError, ProxyError, SessionTimeoutError } from "../utils/error";
+import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { KnkyStoryType, PostType } from "../types/constant";
 import { IAccountID, IAccountSettings, IBotConfig, IContent, ISchedulePost } from "../types/interface";
 import { IKnkyFolder, IKnkyPost, IKnkyUser as IKnkyProfile, IKnkyRevenue, IKnkyStat, IKnkyStory, IKnkyStoryData, IKnkyVault } from "../types/knky";
@@ -80,7 +80,7 @@ export class KnkyBrowser extends BaseBrowser {
       if (!authResp.ok()) {
         const message = authData.message;
         if (message.includes("Incorrect"))
-          throw new BotError("wrong credentials", {
+          throw new AuthError("wrong credentials", {
             where: "KnkyBrowser::login",
             method: "POST",
             endpoint: "https://backend.knky.co/v1/users/login",
@@ -89,7 +89,7 @@ export class KnkyBrowser extends BaseBrowser {
             response: authData,
           })
         else if (message.includes("Wrong password"))
-          throw new BotError("wrong credentials", {
+          throw new AuthError("wrong credentials", {
             where: "KnkyBrowser::login",
             method: "POST",
             endpoint: "https://backend.knky.co/v1/users/login",
@@ -99,7 +99,7 @@ export class KnkyBrowser extends BaseBrowser {
           });
         if (message.includes("2FA")) {
           if (!setting.device)
-            throw new BotError("no security key");
+            throw new AuthError("no security key");
           const code = await this.generate2FACode(setting.device);
           await this.page.locator("div#otpVerificationModal input").first().fill(code);
           const authPromise1 = this.page.waitForResponse(response => {
@@ -110,7 +110,7 @@ export class KnkyBrowser extends BaseBrowser {
           const authPayload1 = await authResp1.json();
           const authData1 = this.parsePayload(authPayload1.r)
           if (!authResp1.ok())
-            throw new BotError("invalid security key", {
+            throw new AuthError("invalid security key", {
               where: "KnkyBrowser::login",
               method: "POST",
               endpoint: "https://backend.knky.co/v1/users/login",
@@ -130,7 +130,7 @@ export class KnkyBrowser extends BaseBrowser {
         }
       } else if (authData.data?.otp_required) {
         if (!setting.device)
-          throw new BotError("no security key");
+          throw new AuthError("no security key");
         const code = await this.generate2FACode(setting.device);
         await this.page.locator("div#otpVerificationModal input").first().fill(code);
         const authPromise1 = this.page.waitForResponse(response => {
@@ -141,7 +141,7 @@ export class KnkyBrowser extends BaseBrowser {
         const authPayload1 = await authResp1.json();
         const authData1 = this.parsePayload(authPayload1.r)
         if (!authResp1.ok())
-          throw new BotError("invalid security key", {
+          throw new AuthError("invalid security key", {
             where: "KnkyBrowser::login",
             method: "POST",
             endpoint: "https://backend.knky.co/v1/users/verify-login-otp",
