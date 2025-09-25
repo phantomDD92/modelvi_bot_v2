@@ -1,6 +1,7 @@
 import moment from "moment";
+import { APIResponse } from "playwright";
 import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
-import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
+import { IAccountID, IAccountSettings, IApiInfo, IBotConfig } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
 import { ILoyalFansMedia, ILoyalFansPost, ILoyalFansProfile, ILoyalFansStory } from "../types/loyalfans";
@@ -116,25 +117,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: params
       });
-      if (!resp.ok()) {
-        if (resp.status() == HttpStatusCode.InternalServerError) {
-          const respData = await resp.json()
-          if (respData.httpCode == HttpStatusCode.Forbidden) {
-            throw new SessionTimeoutError("session timeout", {
-              where: "LoyalFansBrowser::getMonthlyEarnings"
-            });
-          }
-        }
-        throw new BotError("get earnings failed", {
-          where: "LoyalFansBrowser::getMonthlyEarnings",
-          method: "POST",
-          endpoint: "https://www.loyalfans.com/api/v2/funds/earnings/summary?ngsw-bypass=true",
-          params,
-          status: resp.statusText(),
-          response: await resp.text(),
-        })
-      }
-      const respData = await resp.json()
+      const respData = await this.getResponseData(resp, { function: "getMonthlyEarnings", action: "get earnings", params, method: "POST" });
       return respData.NET?.total || 0;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -153,16 +136,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: { slug: this.profile.user.slug }
       })
-      if (!resp.ok())
-        throw new BotError("get stories failed", {
-          where: "LoyalFansBrowser::getSelfStories",
-          method: "POST",
-          endpoint: "https://www.loyalfans.com/api/v2/stories?ngsw-bypass=true",
-          params: { slug: this.profile.user.slug },
-          status: resp.statusText(),
-          response: await resp.text()
-        })
-      const respData = await resp.json();
+      const respData = await this.getResponseData(resp, { function: "getSelfStories", action: "get stories", method: "POST", params: { slug: this.profile.user.slug } })
       const items: ILoyalFansStory[] = respData.list;
       return items.map(item => item.uid);
     } catch (error: any) {
@@ -182,15 +156,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: { uid: storyId }
       });
-      if (!resp.ok())
-        throw new BotError("delete story failed", {
-          where: "LoyalFansBrowser::deleteStory",
-          method: "POST",
-          endpoint: "https://www.loyalfans.com/api/v2/stories/delete?ngsw-bypass=true",
-          params: { uid: storyId },
-          status: resp.statusText(),
-          response: await resp.text()
-        });
+      await this.getResponseData(resp, { function: "deleteStory", action: "delete story", method: "POST", params: { uid: storyId } })
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -201,7 +167,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       });
     }
   }
-
 
   public async getSelfPosts(): Promise<string[]> {
     let postIds: string[] = [];
@@ -217,16 +182,7 @@ export class LoyalFansBrowser extends BaseBrowser {
           headers: this.headers,
           data: params
         });
-        if (!resp.ok())
-          throw new BotError("get posts failed", {
-            where: "LoyalFansBrowser::getSelfPosts",
-            method: "POST",
-            endpoint: "https://www.loyalfans.com/api/v1/timeline?ngsw-bypass=true",
-            params,
-            status: resp.statusText(),
-            response: await resp.text(),
-          });
-        const respData = await resp.json();
+        const respData = await this.getResponseData(resp, { function: "getSelfPosts", action: "get posts", method: "POST", params })
         const posts: ILoyalFansPost[] = respData.timeline;
         postIds.push(...posts.map(post => post.uid));
         page += 1;
@@ -262,16 +218,7 @@ export class LoyalFansBrowser extends BaseBrowser {
           headers: this.headers,
           data: params
         });
-        if (!resp.ok())
-          throw new BotError("get posts failed", {
-            where: "LoyalFansBrowser::getSelfPosts",
-            method: "POST",
-            endpoint: "https://www.loyalfans.com/api/v1/timeline?ngsw-bypass=true",
-            params,
-            status: resp.statusText(),
-            response: await resp.text(),
-          });
-        const respData = await resp.json();
+        const respData = await this.getResponseData(resp, { function: "getSelfFreePosts", action: "get posts", method: "POST", params })
         const posts: ILoyalFansPost[] = respData.timeline;
         postIds.push(...posts.filter(post => post.privacy?.privacy_rule == "public" && post.original_content.includes("#modelvi")).map(post => post.uid));
         page += 1;
@@ -286,7 +233,7 @@ export class LoyalFansBrowser extends BaseBrowser {
       if (error instanceof BotError)
         throw error;
       throw new BotError("get posts failed", {
-        where: "LoyalFansBrowser::getSelfPosts",
+        where: "LoyalFansBrowser::getSelfFreePosts",
         error: error.message,
         stack: error.stack,
       })
@@ -299,16 +246,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: { name, "parent_uid": null }
       });
-      if (!resp.ok())
-        throw new BotError("create folder failed", {
-          where: "LoyalFansBrowser::createFolder",
-          method: "POST",
-          endpoint: "https://www.loyalfans.com/api/v2/fs/make-folder?ngsw-bypass=true",
-          params: { name, "parent_uid": null },
-          status: resp.statusText(),
-          response: await resp.text()
-        })
-      const respData = await resp.json();
+      const respData = await this.getResponseData(resp, { function: "createFolder", action: "create folder", method: "POST", params: { name, "parent_uid": null } })
       return respData.folder?.uid;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -327,15 +265,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: { parent_uid: folderId, uid: [mediaId] }
       });
-      if (!resp.ok())
-        throw new BotError("move media failed", {
-          where: "LoyalFansBrowser::moveMediaToFolder",
-          method: "POST",
-          endpoint: "https://www.loyalfans.com/api/v2/fs/move?ngsw-bypass=true",
-          params: { parent_uid: folderId, uid: [mediaId] },
-          status: resp.statusText(),
-          response: await resp.text()
-        });
+      await this.getResponseData(resp, { function: "moveMediaToFolder", action: "move media", method: "POST", params: { parent_uid: folderId, uid: [mediaId] }, })
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -360,6 +290,7 @@ export class LoyalFansBrowser extends BaseBrowser {
       await this.page.locator("app-media-cloud-modal > section.header-wrapper > div.header-buttons > button", { hasText: "New" }).click();
       await this.page.locator("app-media-cloud-modal > section.header-wrapper > div.header-buttons > input.ng-star-inserted").setInputFiles(path);
       const uploadResp = await uploadPromise;
+
       if (!uploadResp.ok())
         throw new BotError("upload media failed", {
           where: "LoyalFansBrowser::uploadMedia",
@@ -399,15 +330,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         data: { uid: postId }
       });
-      if (!resp.ok())
-        throw new BotError("delete post failed", {
-          where: "LoyalFansBrowser::deletePost",
-          method: "POST",
-          endpoint: "https://www.loyalfans.com/api/v1/post/delete-post?ngsw-bypass=true",
-          params: { uid: postId },
-          status: resp.statusText(),
-          response: await resp.text()
-        });
+      await this.getResponseData(resp, { function: "deletePost", action: "delete post", method: "POST", params: { uid: postId } })
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -431,20 +354,13 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         params
       })
-      if (!resp.ok())
-        throw new BotError("find folder failed", {
-          where: "LoyalFansBrowser::findFolder",
-          method: "GET",
-          endpoint: "https://www.loyalfans.com/api/v2/fs/list",
-          params,
-          status: resp.statusText(),
-          response: await resp.text()
-        })
-      const respData = await resp.json();
+      const respData = await this.getResponseData(resp, { function: "findFolder", action: "find folder", params })
       const items: ILoyalFansMedia[] = respData.items;
       const folder = items.find(item => item.type == "folder" && item.name.toLowerCase() == name.toLowerCase())
       return folder?.uid;
     } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
       throw new BotError("find folder failed", {
         where: "LoyalFansBrowser::findFolder",
         error: error.message,
@@ -468,16 +384,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         headers: this.headers,
         params: pageToken ? { "page_token": pageToken, ...params } : params,
       });
-      if (!resp.ok())
-        throw new BotError("find media failed", {
-          where: "LoyalFansBrowser::findMediaInFolder",
-          method: "GET",
-          endpoint: "https://www.loyalfans.com/api/v2/fs/list",
-          params: pageToken ? { "page_token": pageToken, ...params } : params,
-          status: resp.statusText(),
-          response: await resp.text()
-        })
-      const respData = await resp.json();
+      const respData = await this.getResponseData(resp, { function: "findMediaInFolder", action: "find media", params })
       const items: ILoyalFansMedia[] = respData.items || []
       media = items.find(item => item.type != "folder" && item.uid == mediaId);
       return media?.uid;
@@ -539,21 +446,11 @@ export class LoyalFansBrowser extends BaseBrowser {
           }
           break;
       }
-
       const resp = await this.page.request.post("https://www.loyalfans.com/api/v1/post/create-post?ngsw-bypass=true", {
         headers: this.headers,
         data: params
       });
-      if (!resp.ok())
-        throw new BotError("schedule post failed", {
-          where: "LoyalFansBrowser::schedulePost",
-          method: "POST",
-          endpoint: "https://www.loyalfans.com/api/v1/post/create-post?ngsw-bypass=true",
-          params,
-          status: resp.statusText(),
-          response: await resp.text()
-        })
-      // const respData = await resp.json();
+      await this.getResponseData(resp, { action: "schedule post", function: "schedulePost", method: "POST", params })
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
@@ -578,5 +475,25 @@ export class LoyalFansBrowser extends BaseBrowser {
         stack: error.stack,
       })
     }
+  }
+
+  private async getResponseData(resp: APIResponse, info: IApiInfo) {
+    const respData = await resp.json();
+    if (!resp.ok()) {
+      if (resp.status() == HttpStatusCode.InternalServerError)
+        if (respData.httpCode == HttpStatusCode.Forbidden)
+          throw new SessionTimeoutError("session timeout", {
+            where: `LoyalFansBrowser::${info.function}`
+          });
+      throw new BotError(`${info.action} failed`, {
+        where: `LoyalFansBrowser::${info.function}`,
+        method: info.method || "GET",
+        endpoint: info.endpoint || resp.url(),
+        params: info.params,
+        status: resp.statusText(),
+        response: await resp.text()
+      })
+    }
+    return respData;
   }
 }

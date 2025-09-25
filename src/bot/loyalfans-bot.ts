@@ -6,6 +6,7 @@ import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from
 import { IBotConfig, IContent, ISchedulePost } from '../types/interface';
 import { Logger } from '../utils/logger';
 import { PostBot } from './post-bot';
+import { SessionTimeoutError } from '../utils/error';
 
 export class LoyalFansBot extends PostBot {
   protected browser!: LoyalFansBrowser;
@@ -132,6 +133,8 @@ export class LoyalFansBot extends PostBot {
       this.logger.notifyError(error);
       await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
       await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
+      if (error instanceof SessionTimeoutError)
+        await this.browser.refreshSession()
       return false;
     }
   }
@@ -147,6 +150,8 @@ export class LoyalFansBot extends PostBot {
       this.logger.notifyError(error);
       await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" });
+      if (error instanceof SessionTimeoutError)
+        await this.browser.refreshSession()
     }
   }
 
@@ -182,6 +187,8 @@ export class LoyalFansBot extends PostBot {
       return available;
     } catch (error: any) {
       this.logger.notifyError(error);
+      if (error instanceof SessionTimeoutError)
+        await this.browser.refreshSession()
       return false;
     }
   }

@@ -188,3 +188,11 @@ export interface ILog {
   description?: string,
   time?: Date,
 }
+
+export interface IApiInfo {
+  action: string,
+  function: string,
+  method?: string,
+  endpoint?:string,
+  params?: any,
+}
