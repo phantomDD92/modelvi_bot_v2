@@ -147,7 +147,7 @@ export class F2fBot extends PostBot {
         return true;
       }
       await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
-      await this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds);
+      await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
