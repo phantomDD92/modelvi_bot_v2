@@ -241,10 +241,10 @@ export class FancentroBot extends PostBot {
   }
 
   protected needTest(): boolean {
-    if (!this.tested) {
-      this.tested = true
-      return true;
-    }
+    // if (!this.tested) {
+    //   this.tested = true
+    //   return true;
+    // }
     return false;
   }
 
