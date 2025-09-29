@@ -278,11 +278,11 @@ export class OnlyFansBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePost(image: string, scheduledAt: Date, title: string, postType?: number, postPrice?: number): Promise<string> {
+  public async schedulePost(images: string[], scheduledAt: Date, title: string, postType?: number, postPrice?: number): Promise<string> {
     try {
       await this.page.goto(`https://onlyfans.com/posts/create?scheduleDate=${moment(scheduledAt).utc().toDate().toISOString()}`, { timeout: 120000 });
       console.log("go to create page");
-      await this.page.locator('div.stories-list button.m-create').waitFor({ timeout: 120000 }) // your upload button's selector
+      await this.page.locator('div.stories-list button.m-create').waitFor({ timeout: 120000 * images.length }) // your upload button's selector
       console.log("find upload button");
       // await this.page.waitForTimeout(10000);
       // upload media
@@ -290,26 +290,24 @@ export class OnlyFansBrowser extends BaseBrowser {
         this.page.waitForEvent('filechooser'),
         this.page.click('button#attach_file_photo')
       ]);
+      let seen = 0;
       const uploadPromise = this.page.waitForResponse(response => {
-        console.log(response.url())
-        return response.url().includes("https://onlyfans.com/api2/v2/vault/media/hash")
+        if (response.url().includes("https://onlyfans.com/api2/v2/vault/media/hash"))
+          seen += 1;
+        if (seen == images.length)
+          return true;
+        return false;
       });
-      await fileChooser.setFiles(image);
-      const uploadResp = await uploadPromise
-      if (!uploadResp.ok()) {
-        throw new BotError("upload media failed", {
-          where: "OnlyFansBrowser::uploadMedia",
-          status: uploadResp.statusText(),
-          response: await uploadResp.text()
-        })
+      await fileChooser.setFiles(images);
+      try {
+        await uploadPromise;
+      } catch (error: any) {
+        if (seen == 0)
+          throw new BotError("schedule post failed", {
+            where: "OnlyFansBrowser::schedulePost",
+            error: "upload media failed",
+          })
       }
-      const uploadData = await uploadResp.json();
-      if (!uploadData.id)
-        throw new BotError("upload media failed", {
-          where: "OnlyFansBrowser::uploadMedia",
-          status: uploadResp.statusText(),
-          response: await uploadResp.text()
-        });
       await this.page.locator("div.input-text-editor div.tiptap").pressSequentially(title);
       if (postType == PostType.PAID) {
         await this.page.locator("button[at-attr='price_btn']").click();
@@ -320,7 +318,6 @@ export class OnlyFansBrowser extends BaseBrowser {
       await this.page.locator("div.g-page__header button.g-btn", { hasText: "Save" }).click();
       const createResp = await createPromise;
       const createData = await createResp.json()
-      console.log(createData.id);
       return "" + createData.id;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -359,8 +356,8 @@ export class OnlyFansBrowser extends BaseBrowser {
 
   public async getSelfPosts(): Promise<string[]> {
     try {
-      const postsPromise = this.page.waitForResponse(response => response.url().includes(`https://onlyfans.com/api2/v2/users/${this.profile.id}/posts?`), {timeout: 60000});
-      await this.page.goto(`https://onlyfans.com/${this.profile.username}`, {timeout: 120000});
+      const postsPromise = this.page.waitForResponse(response => response.url().includes(`https://onlyfans.com/api2/v2/users/${this.profile.id}/posts?`), { timeout: 60000 });
+      await this.page.goto(`https://onlyfans.com/${this.profile.username}`, { timeout: 120000 });
       const postsResp = await postsPromise;
       const postsData = await postsResp.json()
       const posts: IOnlyFansPost[] = postsData.list || []
@@ -368,7 +365,7 @@ export class OnlyFansBrowser extends BaseBrowser {
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
-      throw new BotError("delete post failed", {
+      throw new BotError("get posts failed", {
         where: "OnlyFansBrowser::getSelfPosts",
         error: error.message,
         stack: error.stack,

@@ -1,6 +1,6 @@
 import { OnlyFansBrowser } from '../browser/onlyfans-browser';
 import { PostApiService } from '../services/post-service';
-import { ActionType, ScheduleStatus } from '../types/constant';
+import { ActionType, PostType, ScheduleStatus } from '../types/constant';
 import { IBotConfig, ISchedulePost, IScheduleResult } from '../types/interface';
 import { Logger } from '../utils/logger';
 import { PostBot } from './post-bot';
@@ -31,26 +31,6 @@ export class OnlyFansBot extends PostBot {
     this.logger.info("init account success");
   }
 
-  protected needPost(): boolean {
-    return false;
-  }
-
-  protected needComment(): boolean {
-    return false;
-  }
-
-  protected needCalibrate(): boolean {
-    return false
-  }
-
-  protected needStory(): boolean {
-    return false
-  }
-
-  protected needChat(): boolean {
-    return false;
-  }
-
   // bot action for posting
   protected async doPost(): Promise<boolean> {
     return Promise.resolve(true);
@@ -75,9 +55,14 @@ export class OnlyFansBot extends PostBot {
 
   private async publishSchedule(post: ISchedulePost): Promise<void> {
     const schedule = post.schedule;
+    console.log(schedule);
+    let medias: string[] = []
     try {
-      const media = await this.downloadFile(schedule.media.name)
-      const postId = await this.browser.schedulePost(media, new Date(schedule.scheduledAt), schedule.title, schedule.type, schedule.price)
+      for (var medium of schedule.medias) {
+        const media = await this.downloadFile(medium.name)
+        medias.push(media);
+      }
+      const postId = await this.browser.schedulePost(medias, new Date(schedule.scheduledAt), schedule.title, schedule.type, schedule.price)
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
@@ -117,4 +102,44 @@ export class OnlyFansBot extends PostBot {
       return false;
     }
   }
+  public async doTest(): Promise<boolean> {
+    try {
+      const postIds = await this.browser.getSelfPosts();
+      console.log(postIds)
+      return true;
+    } catch (error: any) {
+      console.error(error);
+      return false;
+    }
+  }
+
+  protected needTest(): boolean {
+    if (!this.tested) {
+      this.tested = true;
+      return true;
+    }
+    return false;
+  }
+
+  protected needPost(): boolean {
+    return false;
+  }
+
+  protected needComment(): boolean {
+    return false;
+  }
+
+  protected needCalibrate(): boolean {
+    return false
+  }
+
+  protected needStory(): boolean {
+    return false
+  }
+
+  protected needChat(): boolean {
+    return false;
+  }
+
+
 }

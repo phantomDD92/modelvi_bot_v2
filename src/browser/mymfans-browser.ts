@@ -182,7 +182,7 @@ export class MymFansBrowser extends BaseBrowser {
   }
 
 
-  public async schedulePost(scheduledAt: Date, title: string, imagePath: string, type?: number) {
+  public async schedulePost(scheduledAt: Date, title: string, image: string, type?: number) {
     try {
       await this.page.goto("https://creators.mym.fans/app/post/configuration", { timeout: 180000 });
       // set title
@@ -193,7 +193,7 @@ export class MymFansBrowser extends BaseBrowser {
       else
         await this.page.locator("input[data-testid='post-creation-form-visibility-public-radio']").first().setChecked(true);
       // set image
-      await this.page.locator("input[data-testid='upload-input']").first().setInputFiles(imagePath);
+      await this.page.locator("input[data-testid='upload-input']").first().setInputFiles(image);
 
       // click publish
       const mediaPromise = this.page.waitForResponse("https://api.mym.fans/posts/media");
