@@ -168,7 +168,7 @@ export class FourBasedBot extends PostBot {
           this.logger.notifyError(error);
         }
       }
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.media, length} schedule media(${schedule.title})`, targets: mediaIds });
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`, targets: mediaIds });
       if (mediaIds.length == 0)
         throw new BotError("publish schedule failed", {
           where: "FourBasedBot::publishSchedule",
