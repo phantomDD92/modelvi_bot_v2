@@ -399,7 +399,7 @@ export class LoyalFansBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePost(scheduledAt: Date, title: string, tags: string[], mediaId: string, postType?: number, postPrice?: number) {
+  public async schedulePost(scheduledAt: Date, title: string, tags: string[], mediaIds: string[], postType?: number, postPrice?: number) {
     try {
       let params;
       let postTags = tags;
@@ -409,7 +409,7 @@ export class LoyalFansBrowser extends BaseBrowser {
           params = {
             title,
             content: postTags.map(tag => `#${tag}`).join(" "),
-            images: [{ type: "MC", value: mediaId }],
+            images: mediaIds.map(mediaId => ({ type: "MC", value: mediaId })),
             labels: [],
             privacy_coverage: "all",
             privacy_rule: "subscribers",
@@ -423,7 +423,7 @@ export class LoyalFansBrowser extends BaseBrowser {
           params = {
             title,
             content: tags.map(tag => `#${tag}`).join(" "),
-            images: [{ type: "MC", value: mediaId }],
+            images: mediaIds.map(mediaId => ({ type: "MC", value: mediaId })),
             labels: [],
             privacy_coverage: "all",
             privacy_rule: "friends",
@@ -436,7 +436,7 @@ export class LoyalFansBrowser extends BaseBrowser {
           params = {
             title,
             content: tags.map(tag => `#${tag}`).join(" "),
-            images: [{ type: "MC", value: mediaId }],
+            images: mediaIds.map(mediaId => ({ type: "MC", value: mediaId })),
             labels: [],
             privacy_coverage: "all",
             privacy_rule: "public",

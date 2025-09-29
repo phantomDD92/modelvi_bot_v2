@@ -6,7 +6,7 @@ import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from
 import { IBotConfig, IContent, ISchedulePost } from '../types/interface';
 import { Logger } from '../utils/logger';
 import { PostBot } from './post-bot';
-import { SessionTimeoutError } from '../utils/error';
+import { BotError, SessionTimeoutError } from '../utils/error';
 
 export class LoyalFansBot extends PostBot {
   protected browser!: LoyalFansBrowser;
@@ -118,10 +118,10 @@ export class LoyalFansBot extends PostBot {
       const mediaId = await this.getMedia(content.folder, media.name, media.uuid);
       if (media.uuid != mediaId) {
         await this.service.updateContentMedia(postIndex, mediaId);
-        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
       }
       // create a post
-      await this.browser.schedulePost(moment().toDate(), content.title, content.postTags, mediaId);
+      await this.browser.schedulePost(moment().toDate(), content.title, content.postTags, [mediaId]);
       await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})` })
       deleteIds = await this.removePosts();
       if (deleteIds.length > 0) {
@@ -141,9 +141,23 @@ export class LoyalFansBot extends PostBot {
 
   private async publishSchedule(post: ISchedulePost): Promise<void> {
     const schedule = post.schedule;
+    let mediaIds: string[] = []
     try {
-      const mediaId = await this.getMedia(schedule.folder, schedule.media.name);
-      await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaId, schedule.type, schedule.price);
+      for (var medium of schedule.medias) {
+        try {
+          const mediaId = await this.getMedia(schedule.folder, medium.name);
+          mediaIds.push(mediaId);
+        } catch (error: any) {
+          this.logger.notifyError(error);
+        }
+      }
+      if (mediaIds.length == 0)
+        throw new BotError("publish schedule failed", {
+          where: "MaloumBot::publishSchedule",
+          error: "no media uploaded"
+        })
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`, targets: mediaIds });
+      await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaIds, schedule.type, schedule.price);
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, post: undefined, status: ScheduleStatus.SCHEDULED });
     } catch (error) {

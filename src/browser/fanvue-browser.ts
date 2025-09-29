@@ -370,7 +370,7 @@ export class FanvueBrowser extends BaseBrowser {
     return formattedDate;
   }
 
-  public async schedulePost(scheduledAt: Date, title: string, mediaId: string, postType: number, price?: number) {
+  public async schedulePost(scheduledAt: Date, title: string, mediaIds: string[], postType: number, price?: number) {
     try {
       let params;
       switch (postType) {
@@ -381,7 +381,7 @@ export class FanvueBrowser extends BaseBrowser {
               "content_collection_uuids": [],
               "expires_at": null,
               "media_preview_uuid": null,
-              "media_uuids": [mediaId],
+              "media_uuids": mediaIds,
               "price": null,
               "publish_at": this.getZoneTime(scheduledAt),
               "text": title
@@ -402,7 +402,7 @@ export class FanvueBrowser extends BaseBrowser {
               "content_collection_uuids": [],
               "expires_at": null,
               "media_preview_uuid": null,
-              "media_uuids": [mediaId],
+              "media_uuids": mediaIds,
               "price": price * 100,
               "publish_at": this.getZoneTime(scheduledAt),
               "text": title
@@ -419,7 +419,7 @@ export class FanvueBrowser extends BaseBrowser {
               "content_collection_uuids": [],
               "expires_at": null,
               "media_preview_uuid": null,
-              "media_uuids": [mediaId],
+              "media_uuids": mediaIds,
               "price": null,
               "publish_at": this.getZoneTime(scheduledAt),
               "text": title
