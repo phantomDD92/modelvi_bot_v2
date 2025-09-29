@@ -144,7 +144,7 @@ export interface IContent {
 export interface ISchedulePost {
   _id: string,
   schedule: {
-    media: IMedia,
+    media?: IMedia,
     medias: IMedia[],
     preview?: IMedia,
     folder: string,

@@ -531,6 +531,70 @@ export class FanslyBrowser extends BaseBrowser {
     }
   }
 
+  public async createBundle(mediaIds: string[], type: number, price?: number, previewId: string | undefined = undefined): Promise<string> {
+    try {
+      let permissions;
+      switch (type) {
+        case PostType.FREE:
+          permissions = { "permissionFlags": [] };
+          break;
+        case PostType.FANS:
+          permissions = { "permissionFlags": [{ "flags": 4 }] }
+          break;
+        case PostType.PAID:
+          if (!price || price < 1)
+            throw new BotError("create content failed", {
+              where: "FanslyBrowser:createContent",
+              error: "Invalid price value",
+              params: { mediaIds, type, price, previewId },
+            });
+          const priceValue = Math.floor(price * 1000);
+          permissions = { "permissionFlags": [{ "type": 0, "flags": 1, "metadata": `{\"1\":\"{\\\"price\\\":${priceValue}}\"}`, "price": priceValue }] }
+          break;
+        default:
+          throw new BotError("create content failed", {
+            where: "FanslyBrowser:createContent",
+            error: "Unknown content type",
+            params: { mediaIds, type, price, previewId },
+          });
+      }
+      const params = {
+        "accountMediaModels": mediaIds.map(mediaId => ({ mediaId: mediaId, previewId: null, permissionFlags: 0, price: 0, whitelist: [] })),
+        "previewId": previewId || null,
+        "permissionFlags": 0,
+        "price": 0,
+        "whitelist": [],
+        "permissions": permissions,
+        "tags": []
+      };
+      let resp = await this.page.request.post("https://apiv3.fansly.com/api/v1/account/media/bundle?ngsw-bypass=true", {
+        headers: this.headers,
+        data: params,
+      });
+      const respData = await resp.json();
+      console.log(respData);
+      if (!resp.ok() || !respData.success)
+        throw new BotError("create content failed", {
+          where: "FanslyBrowser:createContent",
+          method: "POST",
+          endpoint: "https://apiv3.fansly.com/api/v1/account/media?ngsw-bypass=true",
+          params,
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      const contentId = respData.response?.accountMediaBundles[0]?.id;
+      return contentId;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("create content failed", {
+        where: "FanslyBrowser::createContent",
+        error: error.message,
+        stack: error.stack,
+      })
+    }
+  }
+
   public async createContent(mediaId: string, type: number, price?: number, previewId: string | undefined = undefined): Promise<string> {
     try {
       let permissions;
@@ -650,7 +714,7 @@ export class FanslyBrowser extends BaseBrowser {
         "fypFlags": 0,
         "inReplyTo": null,
         "quotedPostId": null,
-        "attachments": [{ "contentId": contentId, "contentType": 1, "pos": 0 }],
+        "attachments": [{ "contentId": contentId, "contentType": 2, "pos": 0 }],
         "scheduledFor": moment().isAfter(scheduledAt, "hour") ? moment().add(1, "hour").toDate().getTime() : scheduledAt.getTime(),
         "expiresAt": 0,
         "postReplyPermissionFlags": [],
@@ -673,6 +737,7 @@ export class FanslyBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: respData,
         });
+      console.log(respData);
       return respData.response?.postId;
 
     } catch (error: any) {
@@ -1014,6 +1079,30 @@ export class FanslyBrowser extends BaseBrowser {
         throw error;
       throw new BotError("get followings failed", {
         where: "FanslyBrowser::getFollowings",
+        error: error.message,
+        stack: error.stack,
+      })
+    }
+  }
+
+  public async deleteSchedule(postId: string): Promise<void> {
+    try {
+      const resp = await this.page.request.post(`https://apiv3.fansly.com/api/v1/post/scheduled/${postId}/cancel?ngsw-bypass=true`, {
+        headers: this.headers
+      });
+      if (!resp.ok())
+        throw new BotError("delete schedule failed", {
+          where: "FanslyBrowser::deleteSchedule",
+          method: "POST",
+          endpoint: `https://apiv3.fansly.com/api/v1/post/scheduled/${postId}/cancel?ngsw-bypass=true`,
+          status: resp.statusText(),
+          response: await resp.text(),
+        })
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("delete schedule failed", {
+        where: "FanslyBrowser::deleteSchedule",
         error: error.message,
         stack: error.stack,
       })

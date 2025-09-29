@@ -104,8 +104,6 @@ export class OnlyFansBot extends PostBot {
   }
   public async doTest(): Promise<boolean> {
     try {
-      const postIds = await this.browser.getSelfPosts();
-      console.log(postIds)
       return true;
     } catch (error: any) {
       console.error(error);
@@ -114,10 +112,6 @@ export class OnlyFansBot extends PostBot {
   }
 
   protected needTest(): boolean {
-    if (!this.tested) {
-      this.tested = true;
-      return true;
-    }
     return false;
   }
 

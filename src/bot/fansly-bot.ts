@@ -221,10 +221,6 @@ export class FanslyBot extends PostBot {
     return messages;
   }
 
-  protected needTest(): boolean {
-    return false
-  }
-
 
   private async checkPublishedSchedules(schedules: ISchedulePost[]): Promise<IScheduleResult[]> {
     const postIds = await this.browser.getSelfPosts();
@@ -244,15 +240,33 @@ export class FanslyBot extends PostBot {
 
   private async publishSchedule(post: ISchedulePost): Promise<void> {
     const schedule = post.schedule;
+    let mediaIds: string[] = [];
     try {
-      const mediaId = await this.getMedia(schedule.folder, schedule.media);
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload schedule media(${schedule.title})` });
+      for (var medium of schedule.medias) {
+        try {
+          const mediaId = await this.getMedia(schedule.folder, medium);
+          mediaIds.push(mediaId);
+        } catch (error: any) {
+          this.logger.notifyError(error);
+        }
+      }
+      if (mediaIds.length == 0)
+        throw new BotError("publish schedule failed", {
+          where: "FanslyBot::publishSchedule",
+          error: "no media uploaded"
+        })
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`, targets: mediaIds });
       let previewId;
       if (schedule.preview && schedule.preview.name) {
         previewId = await this.getMedia(schedule.folder, schedule.preview);
         await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload schedule preview(${schedule.title})` });
       }
-      const contentId = await this.browser.createContent(mediaId, schedule.type, schedule.price, previewId);
+      let contentId;
+      if (mediaIds.length > 1) {
+        contentId = await this.browser.createBundle(mediaIds, schedule.type, schedule.price, previewId);
+      } else {
+        contentId = await this.browser.createContent(mediaIds[0], schedule.type, schedule.price, previewId);
+      }
       this.logger.info(`create content(${contentId}) for scheduled post`);
       const postId = await this.browser.schedulePost(schedule.title, schedule.tags, contentId, new Date(schedule.scheduledAt));
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
@@ -295,4 +309,10 @@ export class FanslyBot extends PostBot {
       return false;
     }
   }
+
+  protected needTest(): boolean {
+    return false;
+  }
+
+
 }
