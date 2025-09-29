@@ -208,13 +208,4 @@ export class FancentroBot extends PostBot {
     return false;
   }
 
-  // temp code
-
-  protected needPost(): boolean {
-    return false;
-  }
-
-  protected needSchedule(): boolean {
-    return false;
-  }
 }
