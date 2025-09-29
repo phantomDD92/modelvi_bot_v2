@@ -46,7 +46,7 @@ export class MaloumBrowser extends BaseBrowser {
 
   public async refreshSession(): Promise<void> {
     try {
-      const mePromise = this.page.waitForResponse("https://api.maloum.com/users/current");
+      const mePromise = this.page.waitForResponse("https://api.maloum.com/users/current", {timeout: 120000});
       await this.page.goto("https://app.maloum.com/", { timeout: 600000 });
       const meResp = await mePromise;
       this.headers = await meResp.request().allHeaders();
@@ -556,7 +556,7 @@ export class MaloumBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePost(scheduledAt: Date, title: string, tags: string[], mediaId: string, type?: number): Promise<string> {
+  public async schedulePost(scheduledAt: Date, title: string, tags: string[], mediaIds: string[], type?: number): Promise<string> {
     try {
       const categories = await this.getCategories();
       const postTags = (tags || []).map(tag => tag.toLowerCase());
@@ -569,7 +569,7 @@ export class MaloumBrowser extends BaseBrowser {
         caption: title,
         categories: cats.slice(0, 3),
         public: free,
-        mediaIds: [mediaId],
+        mediaIds: mediaIds,
         scheduledAt: moment().isAfter(scheduledAt, "hour") ? moment().add(1, "hour").utc().toISOString() : moment(scheduledAt).utc().toISOString(),
       };
       const resp = await this.page.request.post("https://api.maloum.com/posts", {

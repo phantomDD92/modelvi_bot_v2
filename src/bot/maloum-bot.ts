@@ -100,7 +100,7 @@ export class MaloumBot extends PostBot {
         folderName = "Posts";
       let mediaId = await this.getMedia(folderName, media)
       if (mediaId != media.uuid) {
-        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
       const postId = await this.browser.publishPost(content.title, content.postTags, mediaId)
@@ -219,9 +219,23 @@ export class MaloumBot extends PostBot {
 
   private async publishSchedule(post: ISchedulePost): Promise<void> {
     const schedule = post.schedule;
+    let mediaIds: string[] = [];
     try {
-      const mediaId = await this.getMedia(schedule.folder, schedule.media);
-      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaId, schedule.type)
+      for (var medium of schedule.medias) {
+        try {
+          const mediaId = await this.getMedia(schedule.folder, medium);
+          mediaIds.push(mediaId);
+        } catch (error: any) {
+          this.logger.notifyError(error);
+        }
+      }
+      if (mediaIds.length == 0)
+        throw new BotError("publish schedule failed", {
+          where: "MaloumBot::publishSchedule",
+          error: "no media uploaded"
+        })
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`, targets: mediaIds });
+      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaIds, schedule.type)
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
