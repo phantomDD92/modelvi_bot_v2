@@ -1,6 +1,6 @@
 import moment from "moment";
 import { EUROTOUSD as EURO_TO_USD, F2F_PRICE_MIN, F2FStoryType, PostType } from "../types/constant";
-import {  IF2fChat, IF2fExplore, IF2fFolder, IF2fMedia, IF2fMessage, IF2fPost, IF2fProfile, IF2FRevenue, IF2fStory } from "../types/f2f";
+import { IF2fChat, IF2fExplore, IF2fFolder, IF2fMedia, IF2fMessage, IF2fPost, IF2fProfile, IF2FRevenue, IF2fStory } from "../types/f2f";
 import { IAccountID, IAccountSettings, IBotConfig, } from "../types/interface";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
@@ -395,17 +395,17 @@ export class F2fBrowser extends BaseBrowser {
     }
   }
 
-  public async createEmptyPost(mediaId: string): Promise<string> {
+  public async createEmptyPost(mediaIds: string[]): Promise<string> {
     try {
       // create post
       let resp = await this.page.request.post("https://f2f.com/api/posts/",
-        { headers: this.headers, data: { media: [mediaId] } });
+        { headers: this.headers, data: { media: mediaIds } });
       if (!resp.ok()) {
         throw new BotError("create post failed", {
           where: "F2fBrowser::createEmptyPost",
           method: "POST",
           endpoint: "https://f2f.com/api/posts/",
-          params: { media: [mediaId] },
+          params: { media: mediaIds },
           status: resp.statusText(),
           response: await resp.json()
         });

@@ -145,6 +145,7 @@ export interface ISchedulePost {
   _id: string,
   schedule: {
     media: IMedia,
+    medias: IMedia[],
     preview?: IMedia,
     folder: string,
     title: string,

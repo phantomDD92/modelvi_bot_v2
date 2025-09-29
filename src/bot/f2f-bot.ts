@@ -87,6 +87,17 @@ export class F2fBot extends PostBot {
     return mediaId;
   }
 
+  private async uploadMedia(folderName: string, media: IMedia[]): Promise<string[]> {
+    const folderId = await this.getFolder(folderName);
+    const mediaId: string[] = []
+    for (var medium of media) {
+      const path = await this.downloadFile(medium.name);
+      this.logger.info(`download media(${medium.name})`);
+      const mediumId = await this.browser.uploadMedia(folderId, path);
+      mediaId.push(mediumId)
+    }
+    return mediaId;
+  }
   // private async createPublicPost(content: IContent, postIndex: number, mediaId: string): Promise<string | undefined> {
   //   const postId = await this.browser.createEmptyPost(mediaId);
   //   let success = await this.browser.setPostTitle(postId, content.title, content.postTags);
@@ -133,7 +144,7 @@ export class F2fBot extends PostBot {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
       }
       // create a post
-      const postId = await this.browser.createEmptyPost(mediaId);
+      const postId = await this.browser.createEmptyPost([mediaId]);
       let success = await this.browser.setPostTitle(postId, content.title, content.postTags);
       if (!success) {
         await this.service.createLog({ success: false, action: ActionType.POST, message: `prohibited to create ${postIndex + 1}st post(${content.title})`, target: postId });
@@ -227,9 +238,10 @@ export class F2fBot extends PostBot {
   private async publishSchedule(post: ISchedulePost): Promise<void> {
     try {
       let success;
-      const mediaId = await this.getMedia(post.schedule.folder, post.schedule.media);
+      // const mediaId = await this.getMedia(post.schedule.folder, post.schedule.media);
+      const mediaIds = await this.uploadMedia(post.schedule.folder, post.schedule.medias)
       this.logger.info(`upload media for schedule post(${post.schedule.title})`);
-      const postId = await this.browser.createEmptyPost(mediaId);
+      const postId = await this.browser.createEmptyPost(mediaIds);
       this.logger.info(`create schedule post(${postId})`);
       success = await this.browser.setPostTitle(postId, post.schedule.title, post.schedule.tags);
       if (!success) {
@@ -312,7 +324,7 @@ export class F2fBot extends PostBot {
       let content;
       while (index != storyIndex) {
         const contentChecked = contents[index];
-        if (contentChecked.f2fStoryType && contentChecked.f2fStoryType > F2FStoryType.NONE) {
+        if (contentChecked.f2fStoryType && contentChecked.f2fStoryType > F2FStoryType.NONE && contentChecked.media[0].name) {
           content = contents[index]
           storyIndex = index
           break;
