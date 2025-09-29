@@ -314,5 +314,4 @@ export class FanslyBot extends PostBot {
     return false;
   }
 
-
 }

@@ -2,7 +2,7 @@ import moment from 'moment';
 import { FancentroBrowser } from '../browser/fancentro-browser';
 import { PostBot } from './post-bot';
 import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from '../types/interface';
-import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from '../types/constant';
+import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, PostType, ScheduleStatus } from '../types/constant';
 import { PostApiService } from '../services/post-service';
 import { Logger } from '../utils/logger';
 import { BotError } from '../utils/error';
@@ -198,6 +198,54 @@ export class FancentroBot extends PostBot {
       this.logger.notifyError(error);
       return false;
     }
+  }
+
+  public async doTest(): Promise<boolean> {
+    try {
+      const post: ISchedulePost = {
+        _id: '1',
+        schedule: {
+          medias: [
+            { "name": "dd7b368f-32ea-4d28-9182-abb3f306532e.jpg", "mode": "image/jpeg", },
+            { "name": "52604419-2985-436c-a558-bb924b25c352.jpg", "mode": "image/jpeg", },
+            { "name": "57d2c390-265e-41fe-be66-6aa48ddd9018.jpg", "mode": "image/jpeg", },
+          ],
+          folder: 'SPAM',
+          title: 'Join me for fun and pleasure',
+          tags: ["gay", "intiem", "spannend",],
+          type: PostType.PAID,
+          price: 10,
+          scheduledAt: "2025-10-30"
+        },
+        status: 0
+      }
+      const schedule = post.schedule;
+      let mediaIds = []
+      for (var medium of schedule.medias) {
+        const mediaId = await this.uploadMedia(medium);
+        if (mediaId)
+          mediaIds.push(mediaId);
+      }
+      if (mediaIds.length == 0)
+        throw new BotError("publish schedule failed", {
+          where: "FancentroBot::publishSchedule",
+          error: "no media uploaded"
+        });
+      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), mediaIds, schedule.title, schedule.tags, schedule.type, schedule.price);
+      console.log({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaIds.length}/${schedule.medias, length} images, ${schedule.title})`, target: postId });
+      return true;
+    } catch (error: any) {
+      console.error(error);
+      return false;
+    }
+  }
+
+  protected needTest(): boolean {
+    if (!this.tested) {
+      this.tested = true
+      return true;
+    }
+    return false;
   }
 
   protected needComment(): boolean {
