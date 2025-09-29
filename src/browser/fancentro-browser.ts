@@ -617,7 +617,8 @@ export class FancentroBrowser extends BaseBrowser {
       if (!earningResp.ok())
         throw new BotError("get earnings failed");
       const earningData = await earningResp.json();
-      return this.sumAmounts(earningData.data);
+      const revenue = this.sumAmounts(earningData.data);
+      return revenue;
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;

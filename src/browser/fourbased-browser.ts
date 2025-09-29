@@ -215,7 +215,7 @@ export class FourBasedBrowser extends BaseBrowser {
       // upload media
       await this.page.locator("ion-modal.modal-upload > modal-upload input#upload").setInputFiles(mediaPath);
       // click continue
-      await this.page.locator("ion-modal.modal-upload > modal-upload file-stack-preview").waitFor();
+      await this.page.locator("ion-modal.modal-upload > modal-upload file-stack-preview").waitFor({timeout: 300000});
       await this.page.locator("ion-modal.modal-upload > modal-upload > ion-footer > ion-toolbar > ion-button").last().click();
 
       const vaultPromise = this.page.waitForResponse(response => {
@@ -289,14 +289,12 @@ export class FourBasedBrowser extends BaseBrowser {
       '-' + chr4() + chr4() + chr4();
   };
 
-  public async schedulePost(scheduledAt: Date, title: string, mediaId: string, type?: number, price?: number) {
+  public async schedulePost(scheduledAt: Date, title: string, mediaIds: string[], type?: number, price?: number) {
     try {
       const guid = this.UniqueID();
       const params = {
         "vaults_to_file_stack": {
-          "vaults": [
-            { "id": mediaId, "guid": guid, "position": 0 }
-          ],
+          "vaults": mediaIds.map((mediaId, index) => ({ "id": mediaId, "guid": this.UniqueID(), "position": index })),
           "description": title,
           "price": (price || 0) * 100,
           "to_be_posted_at": moment(scheduledAt).utc().format("YYYY-MM-DD HH:mm:ss"),

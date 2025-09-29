@@ -119,7 +119,7 @@ export class FourBasedBot extends PostBot {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      postId = await this.browser.schedulePost(moment().add(1, "minute").toDate(), content.title, mediaId);
+      postId = await this.browser.schedulePost(moment().add(1, "minute").toDate(), content.title, [mediaId]);
       if (postId) {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
       }
@@ -159,14 +159,27 @@ export class FourBasedBot extends PostBot {
   private async publishSchedule(post: ISchedulePost): Promise<void> {
     const schedule = post.schedule;
     try {
-      const mediaId = await this.getMedia(schedule.folder, schedule.media);
-      await this.service.createLog({ success: true, action: ActionType.POST, message: `upload schedule media(${schedule.title})`, target: mediaId });
-      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, mediaId, schedule.type, schedule.price)
-      await this.service.createLog({ success: true, action: ActionType.POST, message: `create schedule post(${schedule.title})`, target: postId });
+      let mediaIds: string[] = [];
+      for (var medium of schedule.medias) {
+        try {
+          const mediaId = await this.getMedia(schedule.folder, medium);
+          mediaIds.push(mediaId)
+        } catch (error: any) {
+          this.logger.notifyError(error);
+        }
+      }
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.media, length} schedule media(${schedule.title})`, targets: mediaIds });
+      if (mediaIds.length == 0)
+        throw new BotError("publish schedule failed", {
+          where: "FourBasedBot::publishSchedule",
+          error: "no media uploaded"
+        })
+      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, mediaIds, schedule.type, schedule.price)
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create schedule post(${schedule.title})` });
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
     }
   }
