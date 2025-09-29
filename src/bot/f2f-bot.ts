@@ -93,8 +93,12 @@ export class F2fBot extends PostBot {
     for (var medium of media) {
       const path = await this.downloadFile(medium.name);
       this.logger.info(`download media(${medium.name})`);
-      const mediumId = await this.browser.uploadMedia(folderId, path);
-      mediaId.push(mediumId)
+      try {
+        const mediumId = await this.browser.uploadMedia(folderId, path);
+        mediaId.push(mediumId)
+      } catch (error: any) {
+        this.logger.notifyError(error);
+      }
     }
     return mediaId;
   }

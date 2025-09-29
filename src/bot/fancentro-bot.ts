@@ -1,10 +1,11 @@
 import moment from 'moment';
 import { FancentroBrowser } from '../browser/fancentro-browser';
 import { PostBot } from './post-bot';
-import { IBotConfig, IContent, ISchedulePost, IScheduleResult } from '../types/interface';
+import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from '../types/interface';
 import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from '../types/constant';
 import { PostApiService } from '../services/post-service';
 import { Logger } from '../utils/logger';
+import { BotError } from '../utils/error';
 
 export class FancentroBot extends PostBot {
   protected browser!: FancentroBrowser;
@@ -32,9 +33,6 @@ export class FancentroBot extends PostBot {
     this.logger.info("init account success");
   }
 
-  protected needComment(): boolean {
-    return false;
-  }
 
   private async removePosts(): Promise<string[]> {
     try {
@@ -60,9 +58,6 @@ export class FancentroBot extends PostBot {
     }
   }
 
-  protected needStory(): boolean {
-    return false;
-  }
 
   // bot action for posting
   protected async doPost(): Promise<boolean> {
@@ -91,7 +86,7 @@ export class FancentroBot extends PostBot {
         await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
       }
       // create a post
-      const postId = await this.browser.schedulePost(moment().add(1, "day").toDate(), mediaId, content.title, content.postTags);
+      const postId = await this.browser.schedulePost(moment().add(1, "day").toDate(), [mediaId], content.title, content.postTags);
       if (postId) {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
       }
@@ -125,15 +120,32 @@ export class FancentroBot extends PostBot {
     return results;
   }
 
+  private async uploadMedia(media: IMedia): Promise<string | undefined> {
+    try {
+      const mediaId = await this.browser.getVault(0, media.name, media.uuid);
+      return mediaId;
+    } catch (error: any) {
+      this.logger.notifyError(error);
+      return undefined
+    }
+  }
+
   private async publishSchedule(post: ISchedulePost): Promise<void> {
     const schedule = post.schedule;
     try {
-      // const folderId = await this.browser.findOrCreateFolder(schedule.folder);
-      // open content media
-      // const mediaId = await this.browser.getVault(folderId, schedule.media.name, schedule.media.uuid);
-      const mediaId = await this.browser.getVault(0, schedule.media.name, schedule.media.uuid);
-      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), mediaId, schedule.title, schedule.tags, schedule.type, schedule.price);
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
+      let mediaIds = []
+      for (var medium of schedule.medias) {
+        const mediaId = await this.uploadMedia(medium);
+        if (mediaId)
+          mediaIds.push(mediaId);
+      }
+      if (mediaIds.length == 0)
+        throw new BotError("publish schedule failed", {
+          where: "FancentroBot::publishSchedule",
+          error: "no media uploaded"
+        });
+      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), mediaIds, schedule.title, schedule.tags, schedule.type, schedule.price);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaIds.length}/${schedule.medias, length} images, ${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
@@ -186,5 +198,23 @@ export class FancentroBot extends PostBot {
       this.logger.notifyError(error);
       return false;
     }
+  }
+
+  protected needComment(): boolean {
+    return false;
+  }
+
+  protected needStory(): boolean {
+    return false;
+  }
+
+  // temp code
+
+  protected needPost(): boolean {
+    return false;
+  }
+
+  protected needSchedule(): boolean {
+    return false;
   }
 }

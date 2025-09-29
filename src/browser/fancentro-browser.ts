@@ -496,7 +496,7 @@ export class FancentroBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePost(scheduledAt: Date, mediaId: string, title: string, tags: string[], postType?: number, price?: number) {
+  public async schedulePost(scheduledAt: Date, mediaIds: string[], title: string, tags: string[], postType?: number, price?: number) {
     try {
       const tokenPromise = this.page.waitForRequest(request => {
         return request.url().includes('/collaboration/search');
@@ -527,7 +527,7 @@ export class FancentroBrowser extends BaseBrowser {
             "privacy": "followers",
             "publication_channel": "instant",
             "tagIds": tagIds,
-            "media": [{ "id": mediaId, "isFreePreview": false, "order": 1 }],
+            "media": mediaIds.map((mediaId, index) => ({ "id": mediaId, "isFreePreview": false, "order": index + 1 })),
             "token": this.token
           }
           break;
@@ -541,7 +541,7 @@ export class FancentroBrowser extends BaseBrowser {
             "price": price || 0,
             "publication_channel": "instant",
             "tagIds": tagIds,
-            "media": [{ "id": mediaId, "isFreePreview": false, "order": 1 }],
+            "media": mediaIds.map((mediaId, index) => ({ "id": mediaId, "isFreePreview": false, "order": index + 1 })),
             "token": this.token
           }
           break;
@@ -554,7 +554,7 @@ export class FancentroBrowser extends BaseBrowser {
             "privacy": "public",
             "publication_channel": "instant",
             "tagIds": tagIds,
-            "media": [{ "id": mediaId, "isFreePreview": false, "order": 1 }],
+            "media": mediaIds.map((mediaId, index) => ({ "id": mediaId, "isFreePreview": false, "order": index + 1 })),
             "token": this.token
           }
           break
@@ -592,15 +592,32 @@ export class FancentroBrowser extends BaseBrowser {
     }
   }
 
+  private sumAmounts(obj: any) {
+    if (!obj)
+      return 0;
+    let sum = 0;
+    if (obj && typeof obj === 'object') {
+      for (const key of Object.keys(obj)) {
+        const val = obj[key];
+        if (key === 'amount' && typeof val === 'number') {
+          sum += val;
+        } else {
+          sum += this.sumAmounts(val);
+        }
+      }
+    }
+    return sum;
+  }
+
   public async getMonthlyEarnings(): Promise<number> {
     try {
-      const earningPromise = this.page.waitForResponse(response => response.url().includes("https://fancentro.mainhub.com/earnings/fancentro/customer-acquisition-ajax"));
+      const earningPromise = this.page.waitForResponse(response => response.url().includes("https://fancentro.mainhub.com/earnings/fancentro/by-user-earnings-source"));
       await this.page.goto("https://fancentro.mainhub.com/earnings/fancentro/overview");
       const earningResp = await earningPromise;
       if (!earningResp.ok())
         throw new BotError("get earnings failed");
       const earningData = await earningResp.json();
-      return earningData.data?.monthlyTotal || 0;
+      return this.sumAmounts(earningData.data);
     } catch (error: any) {
       if (error instanceof BotError)
         throw error;
