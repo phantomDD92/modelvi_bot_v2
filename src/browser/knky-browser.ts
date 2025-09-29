@@ -431,7 +431,7 @@ export class KnkyBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePost(post: ISchedulePost, image: string): Promise<string> {
+  public async schedulePost(post: ISchedulePost, images: string[]): Promise<string> {
     try {
       const schedule = post.schedule;
       // go to new post page
@@ -460,7 +460,7 @@ export class KnkyBrowser extends BaseBrowser {
       const tagsStr = schedule.tags.map(tag => `#${tag}`).join(" ")
       await this.page.locator("div.create-post-content div.caption-content textarea").first().fill(`${schedule.title}\n${tagsStr}`);
       // set image
-      await this.page.locator("div.post-type-wrapper div.post-type-options input.media-input").setInputFiles(image);
+      await this.page.locator("div.post-type-wrapper div.post-type-options input.media-input").setInputFiles(images);
       await this.page.waitForTimeout(10000);
       const disabled = await this.page.locator("button.createpost-btn").first().isDisabled();
       if (disabled)
@@ -478,7 +478,7 @@ export class KnkyBrowser extends BaseBrowser {
       // check if creating post is enabled
       const createPromise = this.page.waitForResponse(response => {
         return response.url() === "https://backend.knky.co/v1/posts/create-post-new" && response.request().method() === "POST"
-      }, { timeout: 300000 });
+      }, { timeout: 300000 * images.length });
       await this.page.locator("button.createpost-btn").first().click();
       const createResp = await createPromise;
       if (!createResp.ok()) {

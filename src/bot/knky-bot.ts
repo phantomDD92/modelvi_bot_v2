@@ -198,10 +198,14 @@ export class KnKyBot extends PostBot {
     const schedule = post.schedule;
     try {
       // download media
-      const path = await this.downloadFile(schedule.media.name);
-      this.logger.info(`download  media for scheduled post`);
+      let paths: string[] = []
+      for (var medium of schedule.medias) {
+        const path = await this.downloadFile(medium.name);
+        paths.push(path);
+      }
+      this.logger.info(`download ${paths.length} media for scheduled post`);
       // create post
-      const postId = await this.browser.schedulePost(post, path);
+      const postId = await this.browser.schedulePost(post, paths);
       if (postId == "disabled") {
         await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `prohibited to create schedule post(${schedule.title})` });
         await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.FAILED })
