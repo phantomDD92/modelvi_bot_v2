@@ -145,7 +145,7 @@ export class FancentroBot extends PostBot {
           error: "no media uploaded"
         });
       const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), mediaIds, schedule.title, schedule.tags, schedule.type, schedule.price);
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaIds.length}/${schedule.medias, length} images, ${schedule.title})`, target: postId });
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaIds.length}/${schedule.medias.length} images, ${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
       this.logger.notifyError(error);
@@ -232,7 +232,7 @@ export class FancentroBot extends PostBot {
           error: "no media uploaded"
         });
       const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), mediaIds, schedule.title, schedule.tags, schedule.type, schedule.price);
-      console.log({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaIds.length}/${schedule.medias, length} images, ${schedule.title})`, target: postId });
+      console.log({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaIds.length}/${schedule.medias.length} images, ${schedule.title})`, target: postId });
       return true;
     } catch (error: any) {
       console.error(error);
