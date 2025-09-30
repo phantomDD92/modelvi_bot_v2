@@ -60,8 +60,8 @@ export abstract class BaseBrowser {
     this.context = await this.browser.newContext({ serviceWorkers: "block", screen: { width: 1200, height: 800 } });
     this.page = await this.context.newPage();
     // set default timeout
-    this.page.setDefaultTimeout(60000);
-    this.page.setDefaultNavigationTimeout(60000);
+    this.page.setDefaultTimeout(120000);
+    this.page.setDefaultNavigationTimeout(120000);
     // append content filter
     await this.setFilter();
     this.logger.info("init browser success");

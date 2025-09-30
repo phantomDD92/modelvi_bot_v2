@@ -279,7 +279,7 @@ export class LoyalFansBrowser extends BaseBrowser {
 
   public async uploadMedia(path: string): Promise<string> {
     try {
-      await this.page.locator("header button.profile").click();
+      await this.page.locator("header button.profile").click({timeout: 120000});
       await this.page.locator("app-menu-model > div.user-menu > div.wrapper > button", { hasText: "Media Cloud" }).waitFor();
       await this.page.locator("app-menu-model > div.user-menu > div.wrapper > button", { hasText: "Media Cloud" }).click();
       await this.page.waitForTimeout(5000);
