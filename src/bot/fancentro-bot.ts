@@ -83,7 +83,7 @@ export class FancentroBot extends PostBot {
       const mediaId = await this.browser.getVault(0, media.name, media.uuid);
       if (media.uuid != mediaId) {
         await this.service.updateContentMedia(postIndex, mediaId);
-        await this.service.createLog({ success: true, action: ActionType.UPLOAD, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
       }
       // create a post
       const postId = await this.browser.schedulePost(moment().add(1, "day").toDate(), [mediaId], content.title, content.postTags);

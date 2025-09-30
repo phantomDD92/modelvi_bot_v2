@@ -572,7 +572,6 @@ export class FanslyBrowser extends BaseBrowser {
         data: params,
       });
       const respData = await resp.json();
-      console.log(respData);
       if (!resp.ok() || !respData.success)
         throw new BotError("create content failed", {
           where: "FanslyBrowser:createContent",
@@ -737,7 +736,6 @@ export class FanslyBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: respData,
         });
-      console.log(respData);
       return respData.response?.postId;
 
     } catch (error: any) {
@@ -753,7 +751,7 @@ export class FanslyBrowser extends BaseBrowser {
 
   public async uploadContent(folder: string, filepath: string): Promise<any> {
     try {
-      await this.page.locator(".default-dropdown").first().click();
+      await this.page.locator(".default-dropdown").first().click({timeout: 120000});
       await this.page.waitForTimeout(1000);
       await this.page.locator(".default-dropdown > .dropdown-list > .dropdown-item").last().click();
       await this.page.waitForTimeout(1000);
