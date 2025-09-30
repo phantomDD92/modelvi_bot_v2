@@ -109,7 +109,7 @@ export class MaloumBot extends PostBot {
         this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds, moment().add(1, "day").startOf("day").toDate());
       } else {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
-        this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds);
+        this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       }
       return true;
     } catch (error: any) {
