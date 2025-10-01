@@ -55,7 +55,6 @@ export class OnlyFansBot extends PostBot {
 
   private async publishSchedule(post: ISchedulePost): Promise<void> {
     const schedule = post.schedule;
-    console.log(schedule);
     let medias: string[] = []
     try {
       for (var medium of schedule.medias) {

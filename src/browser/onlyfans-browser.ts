@@ -282,7 +282,7 @@ export class OnlyFansBrowser extends BaseBrowser {
     try {
       await this.page.goto(`https://onlyfans.com/posts/create?scheduleDate=${moment(scheduledAt).utc().toDate().toISOString()}`, { timeout: 120000 });
       console.log("go to create page");
-      await this.page.locator('div.stories-list button.m-create').waitFor({ timeout: 120000 * images.length }) // your upload button's selector
+      await this.page.locator('div.stories-list button.m-create').first().waitFor() // your upload button's selector
       console.log("find upload button");
       // await this.page.waitForTimeout(10000);
       // upload media
@@ -297,7 +297,7 @@ export class OnlyFansBrowser extends BaseBrowser {
         if (seen == images.length)
           return true;
         return false;
-      });
+      }, { timeout: 120000 * images.length });
       await fileChooser.setFiles(images);
       try {
         await uploadPromise;
