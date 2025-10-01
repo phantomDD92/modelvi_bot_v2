@@ -446,9 +446,12 @@ export class KnkyBrowser extends BaseBrowser {
           await this.page.locator("input[name='Price to unlock']").first().fill(`${schedule.price}`);
           break
         case PostType.FANS:
-          // change post audience prime
-          await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-0']").waitFor();
-          await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-0']").first().click();
+          throw new BotError("skip to scheduled post for fans", {
+            where: "KnkyBrowser::schedulePost",
+          });
+          // // change post audience prime
+          // await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-0']").waitFor();
+          // await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-0']").first().click();
           break
         default:
           // change post audience public
