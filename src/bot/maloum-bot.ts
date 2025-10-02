@@ -235,7 +235,7 @@ export class MaloumBot extends PostBot {
           error: "no media uploaded"
         })
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`, targets: mediaIds });
-      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaIds, schedule.type)
+      const postId = await this.browser.schedulePost(new Date(post.scheduledAt), schedule.title, schedule.tags, mediaIds, schedule.type)
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {

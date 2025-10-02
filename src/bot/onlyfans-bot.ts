@@ -61,7 +61,7 @@ export class OnlyFansBot extends PostBot {
         const media = await this.downloadFile(medium.name)
         medias.push(media);
       }
-      const postId = await this.browser.schedulePost(medias, new Date(schedule.scheduledAt), schedule.title, schedule.type, schedule.price)
+      const postId = await this.browser.schedulePost(medias, new Date(post.scheduledAt), schedule.title, schedule.type, schedule.price)
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {

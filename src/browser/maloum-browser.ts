@@ -421,6 +421,7 @@ export class MaloumBrowser extends BaseBrowser {
       const uploadData = await uploadResp.json();
       return uploadData.id
     } catch (error: any) {
+      
       if (error instanceof BotError)
         throw error;
       throw new BotError("upload media failed", {
@@ -572,6 +573,7 @@ export class MaloumBrowser extends BaseBrowser {
         mediaIds: mediaIds,
         scheduledAt: moment().isAfter(scheduledAt, "hour") ? moment().add(1, "hour").utc().toISOString() : moment(scheduledAt).utc().toISOString(),
       };
+      console.log(params);
       const resp = await this.page.request.post("https://api.maloum.com/posts", {
         headers: this.headers,
         data: params

@@ -253,7 +253,7 @@ export class F2fBot extends PostBot {
       this.logger.info(`set post title(${post.schedule.title})`);
       await this.browser.setPostPrice(postId, post.schedule.type, post.schedule.price);
       this.logger.info(`set post price`);
-      success = await this.browser.schedulePost(postId, new Date(post.schedule.scheduledAt));
+      success = await this.browser.schedulePost(postId, new Date(post.scheduledAt));
       if (!success) {
         await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `limited to create schedule post(${post.schedule.title})` });
         await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.FAILED, reason: "rate limited" });
