@@ -539,7 +539,7 @@ export class FanslyBrowser extends BaseBrowser {
           permissions = { "permissionFlags": [] };
           break;
         case PostType.FANS:
-          permissions = { "permissionFlags": [{ "flags": 4 }] }
+          permissions = { "permissionFlags": [{ "type": 0, "flags": 6, "metadata": "{\"4\":\"{\\\"subscriptionTierId\\\":\\\"\\\",\\\"subscriptionTierName\\\":\\\"\\\",\\\"before\\\":0,\\\"after\\\":0}\"}" }] }
           break;
         case PostType.PAID:
           if (!price || price < 1)
@@ -602,7 +602,7 @@ export class FanslyBrowser extends BaseBrowser {
           permissions = { "permissionFlags": [] };
           break;
         case PostType.FANS:
-          permissions = { "permissionFlags": [{ "type": 0, "flags": 2, "metadata": null }] }
+          permissions = { "permissionFlags": [{ "type": 0, "flags": 6, "metadata": "{\"4\":\"{\\\"subscriptionTierId\\\":\\\"\\\",\\\"subscriptionTierName\\\":\\\"\\\",\\\"before\\\":0,\\\"after\\\":0}\"}" }] }
           break;
         case PostType.PAID:
           if (!price || price < 1)
@@ -751,7 +751,7 @@ export class FanslyBrowser extends BaseBrowser {
 
   public async uploadContent(folder: string, filepath: string): Promise<any> {
     try {
-      await this.page.locator(".default-dropdown").first().click({timeout: 120000});
+      await this.page.locator(".default-dropdown").first().click({ timeout: 120000 });
       await this.page.waitForTimeout(1000);
       await this.page.locator(".default-dropdown > .dropdown-list > .dropdown-item").last().click();
       await this.page.waitForTimeout(1000);
