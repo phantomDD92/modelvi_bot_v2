@@ -284,7 +284,7 @@ export class OnlyFansBrowser extends BaseBrowser {
       console.log("go to create page");
       await this.page.locator('div.stories-list button.m-create').first().waitFor() // your upload button's selector
       console.log("find upload button");
-      // await this.page.waitForTimeout(10000);
+      await this.page.waitForTimeout(3000);
       // upload media
       const [fileChooser] = await Promise.all([
         this.page.waitForEvent('filechooser'),
