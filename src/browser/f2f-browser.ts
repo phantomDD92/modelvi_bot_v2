@@ -213,11 +213,12 @@ export class F2fBrowser extends BaseBrowser {
           });
         let respData = await resp.json();
         let folders: IF2fFolder[] = respData.results || [];
-        let folder = folders.find(item => item.name.toLowerCase() == folderName.toLowerCase());
+        let folder = folders.find(item => item.name.toLowerCase() == folderName.trim().toLowerCase());
         if (folder)
           return folder.uuid;
         endpoint = respData.next;
       }
+      console.log("not found");
       return undefined;
     } catch (error: any) {
       if (error instanceof BotError)
