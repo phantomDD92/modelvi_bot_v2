@@ -220,7 +220,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         });
         const respData = await this.getResponseData(resp, { function: "getSelfFreePosts", action: "get posts", method: "POST", params })
         const posts: ILoyalFansPost[] = respData.timeline;
-        postIds.push(...posts.filter(post => post.privacy?.privacy_rule == "public" && (post.original_content.endsWith("#creator") || post.original_content.endsWith("#sexy") || post.original_content.endsWith("#horny"))).map(post => post.uid));
+        postIds.push(...posts.filter(post => post.privacy?.privacy_rule == "public" && (post.original_content.includes("#modelvi") || post.original_content.endsWith("#creator") || post.original_content.endsWith("#sexy") || post.original_content.endsWith("#horny"))).map(post => post.uid));
         page += 1;
         if (posts.length < 4 || page > 5)
           break;
