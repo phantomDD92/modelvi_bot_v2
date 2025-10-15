@@ -431,7 +431,7 @@ export class LoyalFansBrowser extends BaseBrowser {
             images: mediaIds.map(mediaId => ({ type: "MC", value: mediaId })),
             labels: [],
             privacy_coverage: "all",
-            privacy_rule: "friends",
+            privacy_rule: "subscribers",
             schedule_post_at: moment(scheduledAt).format("YYYY-MM-DD HH:mm:ss"),
             timezone: "UTC",
             user_mentions: [],
