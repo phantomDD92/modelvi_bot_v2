@@ -144,7 +144,7 @@ export class FancentroBot extends PostBot {
           where: "FancentroBot::publishSchedule",
           error: "no media uploaded"
         });
-      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), mediaIds, schedule.title, schedule.tags, schedule.type, schedule.price);
+      const postId = await this.browser.schedulePost(new Date(post.scheduledAt), mediaIds, schedule.title, schedule.tags, schedule.type, schedule.price);
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaIds.length}/${schedule.medias.length} images, ${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {
@@ -215,9 +215,10 @@ export class FancentroBot extends PostBot {
           tags: ["gay", "intiem", "spannend",],
           type: PostType.PAID,
           price: 10,
-          scheduledAt: "2025-10-30"
+
         },
-        status: 0
+        status: 0,
+        scheduledAt: "2025-10-30"
       }
       const schedule = post.schedule;
       let mediaIds = []
@@ -231,7 +232,7 @@ export class FancentroBot extends PostBot {
           where: "FancentroBot::publishSchedule",
           error: "no media uploaded"
         });
-      const postId = await this.browser.schedulePost(new Date(schedule.scheduledAt), mediaIds, schedule.title, schedule.tags, schedule.type, schedule.price);
+      const postId = await this.browser.schedulePost(new Date(post.scheduledAt), mediaIds, schedule.title, schedule.tags, schedule.type, schedule.price);
       console.log({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaIds.length}/${schedule.medias.length} images, ${schedule.title})`, target: postId });
       return true;
     } catch (error: any) {

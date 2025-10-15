@@ -113,6 +113,14 @@ export abstract class BaseBrowser {
     return Promise.resolve();
   };
 
+  public async dumpHtml(): Promise<void> {
+    try {
+      const html = await this.page.content();
+      await fs.promises.writeFile("debug.html", html, 'utf8');
+    } catch (error: any) {
+    }
+  }
+
   public abstract login(setting: IAccountSettings): Promise<IAccountID | undefined>;
 
   public async afterLogin(): Promise<void> {

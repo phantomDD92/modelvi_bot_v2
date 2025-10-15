@@ -474,10 +474,10 @@ export class KnkyBrowser extends BaseBrowser {
       await this.page.locator("input#flexSwitchSchedule").waitFor();
       await this.page.locator("input#flexSwitchSchedule").first().setChecked(true);
       await this.page.locator("div.schedule-date > input[type='datetime-local']").waitFor()
-      if (moment().isAfter(schedule.scheduledAt, 'hour'))
+      if (moment().isAfter(post.scheduledAt, 'hour'))
         await this.page.locator("div.schedule-date > input[type='datetime-local']").first().fill(moment().add(1, "hour").format("YYYY-MM-DDTHH:MM"));
       else
-        await this.page.locator("div.schedule-date > input[type='datetime-local']").first().fill(moment(schedule.scheduledAt).format("YYYY-MM-DDTHH:MM"));
+        await this.page.locator("div.schedule-date > input[type='datetime-local']").first().fill(moment(post.scheduledAt).format("YYYY-MM-DDTHH:MM"));
       // check if creating post is enabled
       const createPromise = this.page.waitForResponse(response => {
         return response.url() === "https://backend.knky.co/v1/posts/create-post-new" && response.request().method() === "POST"

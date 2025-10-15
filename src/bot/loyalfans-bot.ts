@@ -157,7 +157,7 @@ export class LoyalFansBot extends PostBot {
           error: "no media uploaded"
         })
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`, targets: mediaIds });
-      await this.browser.schedulePost(new Date(schedule.scheduledAt), schedule.title, schedule.tags, mediaIds, schedule.type, schedule.price);
+      await this.browser.schedulePost(new Date(post.scheduledAt), schedule.title, schedule.tags, mediaIds, schedule.type, schedule.price);
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})` });
       await this.service.updateScheduleResult({ id: post._id, post: undefined, status: ScheduleStatus.SCHEDULED });
     } catch (error) {

@@ -152,8 +152,8 @@ export interface ISchedulePost {
     tags: string[],
     type: number,
     price?: number,
-    scheduledAt: any,
   }
+  scheduledAt: any,
   post?: string
   status: number,
   reason?: string,
@@ -194,6 +194,6 @@ export interface IApiInfo {
   action: string,
   function: string,
   method?: string,
-  endpoint?:string,
+  endpoint?: string,
   params?: any,
 }
