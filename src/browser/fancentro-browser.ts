@@ -26,7 +26,7 @@ export class FancentroBrowser extends BaseBrowser {
 
   public async home(): Promise<void> {
     try {
-      await this.page.goto("https://fancentro.com", { waitUntil: "load", timeout: 60000 });
+      await this.page.goto("https://fancentro.com", { waitUntil: "load" });
       this.logger.info("open home page");
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
@@ -93,7 +93,6 @@ export class FancentroBrowser extends BaseBrowser {
         response: await authResp.text(),
       });
     } catch (error) {
-      await this.page.waitForTimeout(3000);
       if (error instanceof BotError)
         throw error;
       return "success";
