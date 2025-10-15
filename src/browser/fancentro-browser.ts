@@ -93,6 +93,7 @@ export class FancentroBrowser extends BaseBrowser {
         response: await authResp.text(),
       });
     } catch (error) {
+      await this.page.waitForTimeout(3000);
       if (error instanceof BotError)
         throw error;
       return "success";
@@ -105,13 +106,15 @@ export class FancentroBrowser extends BaseBrowser {
       await this.page.locator("header button.mui-style-ctfnfu").waitFor();
       await this.page.locator("header button.mui-style-ctfnfu").click();
 
+      await this.page.locator("form button.mui-style-qrm5bi").click();
+
       // await this.page.waitForLoadState('load');
       await this.page.locator('input[name="email"]').waitFor();
 
       // input login credentials
       await this.page.locator('input[name="email"]').fill(`${setting.email}`);
       await this.page.locator('input[name="password"]').fill(`${setting.password}`);
-      await this.page.locator('input[name="remember_me"]').setChecked(true);
+      // await this.page.locator('input[name="remember_me"]').setChecked(true);
       // click login button
       await this.page.waitForTimeout(500);
       this.logger.info("try to login");
@@ -524,7 +527,8 @@ export class FancentroBrowser extends BaseBrowser {
             "description": "",
             "published_at": moment().isAfter(scheduledAt, "hour") ? moment().add(1, "hour").format('YYYY-MM-DD HH:mm:ss') : moment(scheduledAt).format('YYYY-MM-DD HH:mm:ss'),
             "expired_at": "",
-            "privacy": "followers",
+            "privacy": "paid_subscribers",
+            "price": 0,
             "publication_channel": "instant",
             "tagIds": tagIds,
             "media": mediaIds.map((mediaId, index) => ({ "id": mediaId, "isFreePreview": false, "order": index + 1 })),

@@ -220,7 +220,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         });
         const respData = await this.getResponseData(resp, { function: "getSelfFreePosts", action: "get posts", method: "POST", params })
         const posts: ILoyalFansPost[] = respData.timeline;
-        postIds.push(...posts.filter(post => post.privacy?.privacy_rule == "public" && post.original_content.includes("#modelvi")).map(post => post.uid));
+        postIds.push(...posts.filter(post => post.privacy?.privacy_rule == "public" && (post.original_content.endsWith("#creator") || post.original_content.endsWith("#sexy") || post.original_content.endsWith("#horny"))).map(post => post.uid));
         page += 1;
         if (posts.length < 4 || page > 5)
           break;
@@ -401,9 +401,14 @@ export class LoyalFansBrowser extends BaseBrowser {
 
   public async schedulePost(scheduledAt: Date, title: string, tags: string[], mediaIds: string[], postType?: number, postPrice?: number) {
     try {
+      const labelTags = ["creator", "horny", "sexy"];
       let params;
-      let postTags = tags;
-      postTags.push("modelvi");
+      let postTags = tags
+      if (tags.length > 0 && labelTags.includes(tags[tags.length - 1])) {
+        postTags = tags
+      } else {
+        postTags.push(labelTags[Math.floor(Math.random() * labelTags.length)]);
+      }
       switch (postType) {
         case PostType.PAID:
           params = {
