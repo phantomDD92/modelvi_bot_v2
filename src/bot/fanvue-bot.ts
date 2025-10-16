@@ -6,6 +6,7 @@ import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
 import { BotError } from '../utils/error';
 import { ActionType, DEFAULT_LIVING_POSTS as DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from "../types/constant";
+import { isNormalMedia } from "../utils/helper";
 
 export class FanvueBot extends PostBot {
   protected browser!: FanvueBrowser;
@@ -111,6 +112,12 @@ export class FanvueBot extends PostBot {
       let folderName = content.folder;
       if (!folderName || folderName == "")
         folderName = "Posts";
+      // first check media validation
+      if (!isNormalMedia(media)) {
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `skip to create ${postIndex + 1}st post(${content.title})` });
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, []);
+        return true;
+      }
       let mediaId = await this.getMedia(folderName, media)
       if (mediaId != media.uuid) {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
@@ -130,7 +137,6 @@ export class FanvueBot extends PostBot {
       this.logger.notifyError(error);
       await this.service.updatePostResult(PostResultType.FAILED, undefined, []);
       await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
-
       return false;
     }
   }

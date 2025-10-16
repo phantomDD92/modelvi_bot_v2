@@ -1,4 +1,5 @@
 import { Platform } from "../types/constant";
+import { IMedia } from "../types/interface";
 
 export function getPlatformName(platform: string) {
   switch (platform) {
@@ -38,3 +39,8 @@ export function getPlatformName(platform: string) {
   return "";
 }
 
+export function isNormalMedia(media: IMedia) {
+  if (!media.name || media.name.toLowerCase().endsWith(".mov") || media.name.toLowerCase().endsWith(".heic"))
+    return false;
+  return true;
+}

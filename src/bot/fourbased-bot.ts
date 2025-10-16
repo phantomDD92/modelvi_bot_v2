@@ -6,6 +6,7 @@ import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
 import { BotError, SessionTimeoutError } from '../utils/error';
 import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from "../types/constant";
+import { isNormalMedia } from "../utils/helper";
 
 export class FourBasedBot extends PostBot {
   protected browser!: FourBasedBrowser;
@@ -115,9 +116,9 @@ export class FourBasedBot extends PostBot {
       if (!folderName || folderName == "")
         folderName = "Posts";
       // first check media validation
-      if (media.name.toLowerCase().endsWith(".mov") || media.name.toLowerCase().endsWith(".heic")) {
+      if (!isNormalMedia(media)) {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `skip to create ${postIndex + 1}st post(${content.title})` });
-        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, deleteIds);
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, []);
         return true;
       }
       let mediaId = await this.getMedia(folderName, media)
