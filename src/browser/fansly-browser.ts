@@ -301,7 +301,7 @@ export class FanslyBrowser extends BaseBrowser {
           const twofaResp = await twofaPromise;
           const twofaData = await twofaResp.json();
           if (!twofaData?.success)
-            throw new AuthError("invalid security key", {
+            throw new BotError("login failed", {
               where: "FanslyBrowser::login",
               endpoint: "https://apiv3.fansly.com/api/v1/login/twofa?ngsw-bypass=true",
               status: twofaResp.statusText(),
@@ -539,12 +539,12 @@ export class FanslyBrowser extends BaseBrowser {
           permissions = { "permissionFlags": [] };
           break;
         case PostType.FANS:
-          permissions = { "permissionFlags": [{ "type": 0, "flags": 6, "metadata": "{\"4\":\"{\\\"subscriptionTierId\\\":\\\"\\\",\\\"subscriptionTierName\\\":\\\"\\\",\\\"before\\\":0,\\\"after\\\":0}\"}" }] }
+          permissions = { permissionFlags: [{ flags: 4 }] }
           break;
         case PostType.PAID:
           if (!price || price < 1)
             throw new BotError("create content failed", {
-              where: "FanslyBrowser:createContent",
+              where: "FanslyBrowser:createBundle",
               error: "Invalid price value",
               params: { mediaIds, type, price, previewId },
             });
@@ -553,7 +553,7 @@ export class FanslyBrowser extends BaseBrowser {
           break;
         default:
           throw new BotError("create content failed", {
-            where: "FanslyBrowser:createContent",
+            where: "FanslyBrowser:createBundle",
             error: "Unknown content type",
             params: { mediaIds, type, price, previewId },
           });
@@ -574,7 +574,7 @@ export class FanslyBrowser extends BaseBrowser {
       const respData = await resp.json();
       if (!resp.ok() || !respData.success)
         throw new BotError("create content failed", {
-          where: "FanslyBrowser:createContent",
+          where: "FanslyBrowser:createBundle",
           method: "POST",
           endpoint: "https://apiv3.fansly.com/api/v1/account/media?ngsw-bypass=true",
           params,
@@ -602,7 +602,7 @@ export class FanslyBrowser extends BaseBrowser {
           permissions = { "permissionFlags": [] };
           break;
         case PostType.FANS:
-          permissions = { "permissionFlags": [{ "type": 0, "flags": 6, "metadata": "{\"4\":\"{\\\"subscriptionTierId\\\":\\\"\\\",\\\"subscriptionTierName\\\":\\\"\\\",\\\"before\\\":0,\\\"after\\\":0}\"}" }] }
+          permissions = { permissionFlags: [{ flags: 4 }] }
           break;
         case PostType.PAID:
           if (!price || price < 1)

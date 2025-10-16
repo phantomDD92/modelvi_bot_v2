@@ -31,7 +31,7 @@ export const ScheduleStatus = {
 export const LOG_TIME_FORMAT = "MM-DD HH:mm";
 export const DEFAULT_LIVING_POSTS = 10;
 export const DEFAULT_STORY_MAX_COUNT = 3;
-export const MAX_ERROR_COUNT = 3;
+export const MAX_ERROR_COUNT = 5;
 
 export const POST_PROHIBITED = "prohibited";
 export const POST_LIMITED = "limited";

@@ -252,7 +252,7 @@ export abstract class PostBot extends BaseBot {
   // schedule function
   async schedule(): Promise<void> {
     try {
-      let success = true;
+      let success;
       // get account settings
       await this.getAccount();
       // if account is disabled and not in force mode, close bot
@@ -313,7 +313,7 @@ export abstract class PostBot extends BaseBot {
       if (success) {
         await this.service.clearError()
         this.errorCount = 0;
-      } else {
+      } else if (success === false) {
         this.errorCount += 1;
       }
       if (this.errorCount > MAX_ERROR_COUNT) {
