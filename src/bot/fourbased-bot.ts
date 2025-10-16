@@ -114,6 +114,12 @@ export class FourBasedBot extends PostBot {
       let folderName = content.folder;
       if (!folderName || folderName == "")
         folderName = "Posts";
+      // first check media validation
+      if (media.name.toLowerCase().endsWith(".mov") || media.name.toLowerCase().endsWith(".heic")) {
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `skip to create ${postIndex + 1}st post(${content.title})` });
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, deleteIds);
+        return true;
+      }
       let mediaId = await this.getMedia(folderName, media)
       if (mediaId != media.uuid) {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
