@@ -472,12 +472,17 @@ export class F2fBrowser extends BaseBrowser {
       const respData = await resp.json();
       const media: IF2FPricingMedia[] = respData.media;
       // prepare price info from content
-      const payload: IF2FPricingPayload = {
-        media: media.map(element => ({ pk: element.pk, premium: true })),
-        round_prices: false,
-      };
+      let payload;
+      // const payload: IF2FPricingPayload = {
+      //   media: media.map(element => ({ pk: element.pk, premium: true })),
+      //   round_prices: false,
+      // };
       switch (type) {
         case PostType.FANS:
+          payload = {
+            media: media.map(element => ({ pk: element.pk, premium: true })),
+            round_prices: false,
+          }
           break;
         case PostType.PAID:
           if ((price || 0) < F2F_PRICE_MIN)
@@ -486,10 +491,18 @@ export class F2fBrowser extends BaseBrowser {
               error: "fan price or follower price is not set or less than minimum",
               postType: "paid for everyone"
             });
-          payload["ppp_price"] = price;
-          payload["ppp_fan_price"] = price;
+          payload = {
+            media: media.map(element => ({ pk: element.pk, premium: true })),
+            round_prices: false,
+            ppp_price: price,
+            ppp_fan_price: price,
+          }
           break;
         default:
+          payload = {
+            media: media.map(element => ({ pk: element.pk, premium: false })),
+            round_prices: false,
+          }
           return;
       }
       // set price

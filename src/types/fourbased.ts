@@ -26,6 +26,13 @@ export interface IFourBasedVault {
   user_id: string,
 }
 
+export interface IFourBasedUser {
+  _id: string,
+  verified: boolean,
+  name: string,
+  creator: boolean
+};
+
 export interface IFourBasedChat {
   _id: string,
   users: [{ _id: string, name: string }],

@@ -6,7 +6,7 @@ export class BestFansBrowser extends BaseBrowser {
 
     public async home(): Promise<void> {
         try {
-            await this.page.goto("https://www.bestfans.com/", { timeout: 120000 });
+            await this.page.goto("https://www.bestfans.com/");
         } catch (error: any) {
             throw new BotError("proxy blocked", {
                 where: "BestFansBrowser:home",
@@ -25,12 +25,23 @@ export class BestFansBrowser extends BaseBrowser {
         }
     }
 
-
     public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
         try {
             // input email and 
             await this.page.locator("input#login-email").fill(setting.email);
-            await this.page.waitForTimeout(600000);
+            this.logger.info("set email")
+            await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
+
+            await this.page.locator("input#login-password").waitFor();
+            await this.page.locator("input#login-password").fill(setting.password);
+            this.logger.info("set password")
+            await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
+            
+            await this.page.locator('iframe[title="reCAPTCHA"]').first().waitFor();
+            await this.page.solveRecaptchas();
+            this.logger.info("solve recaptcha")
+            await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
+            
             return undefined;
         } catch (error: any) {
             if (error instanceof BotError)
@@ -40,6 +51,15 @@ export class BestFansBrowser extends BaseBrowser {
                 error: error.stack,
                 message: error.message,
             })
+        }
+    }
+
+    public async afterLogin(): Promise<void> {
+        try {
+            // close enable notification dialog
+            await this.page.locator("div.modal-dialog button#pushSubscriptionPermissionModalDeclineButton").last().click({ timeout: 3000 });
+        } catch (error: any) {
+
         }
     }
 }

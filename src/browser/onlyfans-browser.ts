@@ -356,8 +356,8 @@ export class OnlyFansBrowser extends BaseBrowser {
 
   public async getSelfPosts(): Promise<string[]> {
     try {
-      const postsPromise = this.page.waitForResponse(response => response.url().includes(`https://onlyfans.com/api2/v2/users/${this.profile.id}/posts?`), { timeout: 60000 });
-      await this.page.goto(`https://onlyfans.com/${this.profile.username}`, { timeout: 120000 });
+      const postsPromise = this.page.waitForResponse(response => response.url().includes(`https://onlyfans.com/api2/v2/users/${this.profile.id}/posts?`));
+      await this.page.goto(`https://onlyfans.com/${this.profile.username}`);
       const postsResp = await postsPromise;
       const postsData = await postsResp.json()
       const posts: IOnlyFansPost[] = postsData.list || []

@@ -1,12 +1,17 @@
 import { Platform } from "../types/constant";
-import { IAccountID, IAccountSettings } from "../types/interface";
+import { IAccountID, IAccountSettings, ILog } from "../types/interface";
 import { PostApiService } from "./post-service";
 
 export class FakePostService extends PostApiService {
 
     public async init(): Promise<void> {
-    
+
     }
+
+    public async createLog(log: ILog): Promise<void> {
+        this.logger.info(log.message);
+    }
+
 
     public async createHistory(action: string): Promise<void> {
         this.logger.info(action);
@@ -19,7 +24,7 @@ export class FakePostService extends PostApiService {
             email: "ssbellathorn@gmail.com",
             password: "HPkpR2ANQ9zxB!b",
             status: true,
-            proxy: "cb3ac8e713:zxHGsQ21@163.5.199.72:4444"
+            proxy: "8add406bd93a07ecfabccr.nl:97ebad0ee2642aa8@gw.dataimpulse.com:823"
         }
     }
 

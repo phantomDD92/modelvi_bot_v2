@@ -215,7 +215,7 @@ export class FourBasedBrowser extends BaseBrowser {
       // upload media
       await this.page.locator("ion-modal.modal-upload > modal-upload input#upload").setInputFiles(mediaPath);
       // click continue
-      await this.page.locator("ion-modal.modal-upload > modal-upload file-stack-preview").waitFor({timeout: 300000});
+      await this.page.locator("ion-modal.modal-upload > modal-upload file-stack-preview").waitFor({ timeout: 300000 });
       await this.page.locator("ion-modal.modal-upload > modal-upload > ion-footer > ion-toolbar > ion-button").last().click();
 
       const vaultPromise = this.page.waitForResponse(response => {
@@ -498,6 +498,48 @@ export class FourBasedBrowser extends BaseBrowser {
         throw error;
       throw new BotError("get earnings failed", {
         where: "FourBasedBrowser::getMonthlyEarnings",
+        error: error.message,
+        stack: error.stack
+      })
+    }
+  }
+
+  public async getUsers(role: string): Promise<IFourBasedUser[]> {
+    try {
+      const params = {
+        offset: 0,
+        limit: 40,
+        search: "a",
+        sort: JSON.stringify({ "follower_count": "desc" }),
+        verified: true,
+        role: role
+      }
+      const resp = await this.page.request.get(
+        `https://rest.4based.com/api/1.0/user`,
+        { headers: this.headers, params });
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FourBasedBrowser::getUnreadChats"
+          });
+        throw new BotError("get users failed", {
+          where: "FourBasedBrowser::getUsers",
+          method: "GET",
+          endpoint: `https://rest.4based.com/api/1.0/user`,
+          params,
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
+      const respData = await resp.json();
+      const users: IFourBasedUser[] = respData || [];
+
+      return users;
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("get users failed", {
+        where: "FourBasedBrowser::getUsers",
         error: error.message,
         stack: error.stack
       })
