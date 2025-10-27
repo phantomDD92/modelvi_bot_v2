@@ -388,9 +388,25 @@ export class F2fBot extends PostBot {
 
   protected async doTest(): Promise<boolean> {
     try {
-      const folder = await this.browser.findFolder("SFW")
-      console.log(folder)
-      return true;
+      let success
+      const mediaIds:string[] = ["fd692999-fc95-4aa2-bfdd-fff24043b0f7", "46edd559-399e-444b-8ca2-393eec73f12f", "a953a027-c964-4e81-9557-fac0f4fbf699"];
+      const postId = await this.browser.createEmptyPost(mediaIds);
+      this.logger.info(`create schedule post(${postId})`);
+      success = await this.browser.setPostTitle(postId, "You want it? Come get it.", []);
+      if (!success) {
+        this.logger.info(`prohibited to create schedule post`);
+        return false;
+      }
+      this.logger.info(`set post title`);
+      await this.browser.setPostPrice(postId, PostType.PAID, 10);
+      this.logger.info(`set post price`);
+      success = await this.browser.schedulePost(postId, new Date("2026-10-31"));
+      if (!success) {
+        this.logger.info(`limited to create schedule post`);
+        return false;
+      }
+      this.logger.info(`create schedule post(${postId})`);
+      return true
     } catch (error: any) {
       console.error(error);
       return false;

@@ -218,8 +218,18 @@ export class FourBasedBrowser extends BaseBrowser {
       await this.page.locator("ion-modal.modal-upload > modal-upload file-stack-preview").waitFor({ timeout: 300000 });
       await this.page.locator("ion-modal.modal-upload > modal-upload > ion-footer > ion-toolbar > ion-button").last().click();
 
-      const vaultPromise = this.page.waitForResponse(response => {
-        return response.url().includes("https://storage.4based.com/api/1.0/user") && response.request().method() === "POST"
+      const vaultPromise = this.page.waitForResponse(async (response) => {
+        const urlMatches = response.url().includes("https://storage.4based.com/api/1.0/user");
+        const isPost = response.request().method() === "POST";
+        try {
+          const body = await response.json();
+          // Adjust if completed is nested or differently typed in your API
+          const isCompleted = body?.completed === true;
+          return isCompleted;
+        } catch (e) {
+          // If body isn't JSON or parsing fails, don't resolve yet
+          return false;
+        }
       }, { timeout: 180000 });
       await this.page.locator("ion-modal.modal-upload > modal-upload file-stack-edit").waitFor();
       await this.page.locator("ion-modal.modal-upload > modal-upload > ion-footer > ion-toolbar > ion-button").last().click();
