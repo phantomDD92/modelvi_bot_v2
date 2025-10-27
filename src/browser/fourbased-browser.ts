@@ -224,7 +224,7 @@ export class FourBasedBrowser extends BaseBrowser {
         try {
           const body = await response.json();
           // Adjust if completed is nested or differently typed in your API
-          const isCompleted = body?.completed === true;
+          const isCompleted = body?.complete === true;
           return isCompleted;
         } catch (e) {
           // If body isn't JSON or parsing fails, don't resolve yet
