@@ -6,6 +6,8 @@ export interface IKnkyFolder {
 export interface IKnkyUser {
   _id: string,
   username: string,
+  channel_count: number,
+  channels: [{ _id: string }]
 }
 
 export interface IKnkyPost {

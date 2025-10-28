@@ -3,7 +3,7 @@ import CryptoJS from 'crypto-js';
 import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { KnkyStoryType, PostType } from "../types/constant";
 import { IAccountID, IAccountSettings, IBotConfig, IContent, ISchedulePost } from "../types/interface";
-import { IKnkyFolder, IKnkyPost, IKnkyUser as IKnkyProfile, IKnkyRevenue, IKnkyStat, IKnkyStory, IKnkyStoryData, IKnkyVault } from "../types/knky";
+import { IKnkyFolder, IKnkyPost, IKnkyUser as IKnkyProfile, IKnkyRevenue, IKnkyStory, IKnkyStoryData, IKnkyVault } from "../types/knky";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
 import { HttpStatusCode } from "axios";
@@ -435,10 +435,10 @@ export class KnkyBrowser extends BaseBrowser {
     try {
       const schedule = post.schedule;
       // go to new post page
-      await this.page.goto("https://knky.co/create/new-post", { timeout: 300000 });
-      await this.page.locator("div.post-type-wrapper div.dropdown > button").first().click();
       switch (schedule.type) {
         case PostType.PAID:
+          await this.page.goto("https://knky.co/create/new-post", { timeout: 300000 });
+          await this.page.locator("div.post-type-wrapper div.dropdown > button").first().click();
           // change post audience pay-to-view
           await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-1']").waitFor();
           await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-1']").first().click();
@@ -446,14 +446,19 @@ export class KnkyBrowser extends BaseBrowser {
           await this.page.locator("input[name='Price to unlock']").first().fill(`${schedule.price}`);
           break
         case PostType.FANS:
-          throw new BotError("skip to scheduled post for fans", {
-            where: "KnkyBrowser::schedulePost",
-          });
-          // // change post audience prime
-          // await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-0']").waitFor();
-          // await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-0']").first().click();
+          if (this.profile.channel_count == 0)
+            throw new BotError("skip to scheduled post for fans", {
+              where: "KnkyBrowser::schedulePost",
+            });
+          await this.page.goto("https://knky.co/create/new-post?isChannelPost=true", { timeout: 300000 });
+          await this.page.locator("div.post-type-wrapper div.dropdown > button").first().click();
+          // change post audience prime
+          await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-4']").waitFor();
+          await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-4']").first().click();
           break
         default:
+          await this.page.goto("https://knky.co/create/new-post", { timeout: 300000 });
+          await this.page.locator("div.post-type-wrapper div.dropdown > button").first().click();
           // change post audience public
           await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']").waitFor();
           await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']").first().click();
@@ -464,7 +469,7 @@ export class KnkyBrowser extends BaseBrowser {
       await this.page.locator("div.create-post-content div.caption-content textarea").first().fill(`${schedule.title}\n${tagsStr}`);
       // set image
       await this.page.locator("div.post-type-wrapper div.post-type-options input.media-input").setInputFiles(images);
-      await this.page.waitForTimeout(10000);
+      await this.page.waitForTimeout(120000);
       const disabled = await this.page.locator("button.createpost-btn").first().isDisabled();
       if (disabled)
         return "disabled";
@@ -523,7 +528,7 @@ export class KnkyBrowser extends BaseBrowser {
 
       // set image
       await this.page.locator("div.post-type-wrapper div.post-type-options input.media-input").setInputFiles(image);
-      await this.page.waitForTimeout(10000);
+      await this.page.waitForTimeout(120000);
       const disabled = await this.page.locator("button.createpost-btn").first().isDisabled();
       if (disabled)
         return "disabled";
