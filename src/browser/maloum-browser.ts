@@ -191,7 +191,6 @@ export class MaloumBrowser extends BaseBrowser {
           status: loginResp.statusText(),
           response: await loginResp.text(),
         });
-
       // prepare wait login response
       const mePromise = this.page.waitForResponse(
         "https://api.maloum.com/users/current"
@@ -209,6 +208,8 @@ export class MaloumBrowser extends BaseBrowser {
           response: await meResp.text(),
         });
       }
+      this.logger.info("get user profile");
+
       this.headers = await meResp.request().allHeaders();
       const meData = await meResp.json();
       if (!meData.isCreator)
@@ -811,13 +812,12 @@ export class MaloumBrowser extends BaseBrowser {
 
   public async getMonthlyEarnings(): Promise<number> {
     try {
-      let sum: number = 0;
-      const from = moment().subtract(1, "month").startOf("day");
+      // let sum: number = 0;
+      // const from = moment().subtract(1, "month").startOf("day");
       const resp = await this.page.request.get(
-        "https://api.maloum.com/transactions/history",
+        "https://api.maloum.com/users/balance",
         {
           headers: this.headers,
-          params: { limit: 15 },
         }
       );
       let next;
@@ -829,47 +829,47 @@ export class MaloumBrowser extends BaseBrowser {
         throw new BotError("get earnings failed", {
           where: "MaloumBrowser::getMonthlyEarnings",
           method: "GET",
-          endpoint: "https://api.maloum.com/transactions/history",
-          params: { limit: 15 },
+          endpoint: "https://api.maloum.com/users/balance",
           status: resp.statusText(),
           response: await resp.text(),
         });
       }
       const respData = await resp.json();
-      const items: IMaloumEarning[] = respData.data || [];
-      next = respData.next;
-      for (var item of items) {
-        if (new Date(item.executedAt) >= from.toDate()) {
-          sum += item.price.payoutAmount || 0;
-        }
-      }
-      while (next && new Date(next) > from.toDate()) {
-        const resp = await this.page.request.get(
-          "https://api.maloum.com/transactions/history",
-          {
-            headers: this.headers,
-            params: { limit: 15, next },
-          }
-        );
-        if (!resp.ok())
-          throw new BotError("get earnings failed", {
-            where: "MaloumBrowser::getMonthlyEarnings",
-            method: "GET",
-            endpoint: "https://api.maloum.com/transactions/history",
-            params: { limit: 15 },
-            status: resp.statusText(),
-            response: await resp.text(),
-          });
-        const respData = await resp.json();
-        next = respData.next;
-        const items: IMaloumEarning[] = respData.data || [];
-        for (var item of items) {
-          if (new Date(item.executedAt) >= from.toDate()) {
-            sum += item.price.payoutAmount || 0;
-          }
-        }
-      }
-      return sum;
+      return respData.balance?.payoutAmount || 0;
+      // const items: IMaloumEarning[] = respData.data || [];
+      // next = respData.next;
+      // for (var item of items) {
+      //   if (new Date(item.executedAt) >= from.toDate()) {
+      //     sum += item.price.payoutAmount || 0;
+      //   }
+      // }
+      // while (next && new Date(next) > from.toDate()) {
+      //   const resp = await this.page.request.get(
+      //     "https://api.maloum.com/transactions/history",
+      //     {
+      //       headers: this.headers,
+      //       params: { limit: 15, next },
+      //     }
+      //   );
+      //   if (!resp.ok())
+      //     throw new BotError("get earnings failed", {
+      //       where: "MaloumBrowser::getMonthlyEarnings",
+      //       method: "GET",
+      //       endpoint: "https://api.maloum.com/transactions/history",
+      //       params: { limit: 15 },
+      //       status: resp.statusText(),
+      //       response: await resp.text(),
+      //     });
+      //   const respData = await resp.json();
+      //   next = respData.next;
+      //   const items: IMaloumEarning[] = respData.data || [];
+      //   for (var item of items) {
+      //     if (new Date(item.executedAt) >= from.toDate()) {
+      //       sum += item.price.payoutAmount || 0;
+      //     }
+      //   }
+      // }
+      // return sum;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
       throw new BotError("get earnings failed", {
