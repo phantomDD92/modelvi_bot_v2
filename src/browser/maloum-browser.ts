@@ -498,91 +498,6 @@ export class MaloumBrowser extends BaseBrowser {
     }
   }
 
-  public async uploadMediaInFolder(
-    folder: IMaloumFolder,
-    image: string
-  ): Promise<string> {
-    try {
-      // go to vault page
-      await this.page.goto("https://app.maloum.com/vault", {
-        waitUntil: "load",
-        timeout: 120000,
-      });
-      // open folder
-      await this.page
-        .locator(`div#leftColumn div[title='${folder.name}']`)
-        .waitFor();
-      await this.page
-        .locator(`div#leftColumn div[title='${folder.name}']`)
-        .first()
-        .click();
-      await this.page.waitForTimeout(1000);
-      // upload image
-      const uploadPromise = this.page.waitForResponse(
-        (response) => {
-          return (
-            response
-              .url()
-              .includes("https://api.maloum.com/uploads/generate-upload-url") &&
-            response.request().method() === "POST"
-          );
-        },
-        { timeout: 600000 }
-      );
-      await this.page
-        .locator("div#rightColumn input[type='file']")
-        .first()
-        .setInputFiles(image);
-      const uploadResp = await uploadPromise;
-      if (!uploadResp.ok()) {
-        throw new BotError("upload media failed", {
-          where: "MaloumBrowser::uploadMediaInFolder",
-          method: "POST",
-          endpoint: `https://api.maloum.com/uploads/generate-upload-url`,
-          status: uploadResp.statusText(),
-          response: await uploadResp.text(),
-        });
-      }
-      const uploadData = await uploadResp.json();
-      return uploadData.id;
-    } catch (error: any) {
-      if (error instanceof BotError) throw error;
-      throw new BotError("upload media failed", {
-        where: "MaloumBrowser::uploadMediaInFolder",
-        error: error.message,
-        stack: error.stack,
-      });
-    }
-  }
-
-  private async getCategories(): Promise<IMaloumCategory[]> {
-    const resp = await this.page.request.get(
-      "https://api.maloum.com/categories",
-      {
-        headers: this.headers,
-      }
-    );
-    if (!resp.ok()) {
-      if (resp.status() == HttpStatusCode.Unauthorized)
-        throw new SessionTimeoutError("session timeout", {
-          where: "MaloumBrowser::getCategories",
-        });
-      throw new BotError("get categories failed", {
-        where: "MaloumBrowser::getCategories",
-        method: "GET",
-        endpoint: `https://api.maloum.com/categories`,
-        status: resp.statusText(),
-        response: await resp.text(),
-      });
-    }
-    const respData = await resp.json();
-    return respData
-      ? respData.filter(
-          (item: IMaloumCategory) => item.type == "POST" || item.type == "ALL"
-        )
-      : [];
-  }
-
   public async followPost(postId: string): Promise<void> {
     try {
       const resp = await this.page.request.post(
@@ -688,141 +603,6 @@ export class MaloumBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePost(
-    scheduledAt: Date,
-    title: string,
-    tags: string[],
-    mediaIds: string[],
-    type?: number
-  ): Promise<string> {
-    try {
-      const categories = await this.getCategories();
-      const postTags = (tags || []).map((tag) => tag.toLowerCase());
-      postTags.push("public");
-      const cats = categories
-        .filter((cat) => postTags.includes(cat.name.toLowerCase()))
-        .map((cat) => cat._id);
-      let free = true;
-      if (type == PostType.FANS || type == PostType.PAID) free = false;
-      const params = {
-        caption: title,
-        categories: cats.slice(0, 3),
-        public: free,
-        mediaIds: mediaIds,
-        scheduledAt: moment().isAfter(scheduledAt, "hour")
-          ? moment().add(1, "hour").utc().toISOString()
-          : moment(scheduledAt).utc().toISOString(),
-      };
-      console.log(params);
-      const resp = await this.page.request.post(
-        "https://api.maloum.com/posts",
-        {
-          headers: this.headers,
-          data: params,
-        }
-      );
-      if (!resp.ok()) {
-        if (resp.status() == HttpStatusCode.TooManyRequests) {
-          return POST_LIMITED;
-        }
-        if (resp.status() == HttpStatusCode.Unauthorized)
-          throw new SessionTimeoutError("session timeout", {
-            where: "MaloumBrowser::schedulePost",
-          });
-        else
-          throw new BotError("schedule post failed", {
-            where: "MaloumBrowser::schedulePost",
-            method: "POST",
-            endpoint: `https://api.maloum.com/posts`,
-            status: resp.statusText(),
-            response: await resp.text(),
-            params: JSON.stringify(params),
-          });
-      }
-      const respData: IMaloumPost = await resp.json();
-      return respData._id;
-    } catch (error: any) {
-      if (error instanceof BotError) throw error;
-      throw new BotError("schedule post failed", {
-        where: "MaloumBrowser::schedulePost",
-        error: error.message,
-        stack: error.stack,
-      });
-    }
-  }
-
-  public async publishPost(
-    title: string,
-    tags: string[],
-    mediaId: string,
-    type?: number
-  ): Promise<string> {
-    try {
-      const categories = await this.getCategories();
-      const postTags = (tags || []).map((tag) => tag.toLowerCase());
-      postTags.push("public");
-      const cats = categories
-        .filter((cat) => postTags.includes(cat.name.toLowerCase()))
-        .map((cat) => cat._id);
-      let free = true;
-      if (type == PostType.FANS || type == PostType.PAID) free = false;
-
-      // --- go to create post page
-      await this.page.goto("https://app.maloum.com/post/create");
-      // --- set media for post
-      // click add media button
-      await this.page
-        .locator("form button", { hasText: "Add media" })
-        .first()
-        .click();
-      // select all medias folder
-      await this.page.locator("div[title='All media']").first().click();
-      const resp = await this.page.request.post(
-        "https://api.maloum.com/posts",
-        {
-          headers: this.headers,
-          data: {
-            caption: title,
-            categories: cats.slice(0, 3),
-            public: free,
-            mediaIds: [mediaId],
-          },
-        }
-      );
-      // if (!resp.ok()) {
-      //   if (resp.status() == HttpStatusCode.TooManyRequests)
-      //     return POST_LIMITED;
-      //   if (resp.status() == HttpStatusCode.Unauthorized)
-      //     throw new SessionTimeoutError("session timeout", {
-      //       where: "MaloumBrowser::publishPost",
-      //     });
-
-      //   throw new BotError("publish post failed", {
-      //     where: "MaloumBrowser::publishPost",
-      //     method: "POST",
-      //     endpoint: `https://api.maloum.com/posts`,
-      //     status: resp.statusText(),
-      //     response: await resp.text(),
-      //     params: {
-      //       caption: title,
-      //       categories: cats.slice(0, 3),
-      //       public: free,
-      //       mediaIds: [mediaId],
-      //     },
-      //   });
-      // }
-      const respData: IMaloumPost = await resp.json();
-      return respData._id;
-    } catch (error: any) {
-      if (error instanceof BotError) throw error;
-      throw new BotError("publish post failed", {
-        where: "MaloumBrowser::publishPost",
-        error: error.message,
-        stack: error.stack,
-      });
-    }
-  }
-
   public async getMonthlyEarnings(): Promise<number> {
     try {
       const balancePromise = this.page.waitForResponse(
@@ -858,7 +638,7 @@ export class MaloumBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePostV2(
+  public async schedulePost(
     scheduledAt: Date,
     title: string,
     tags: string[],
@@ -908,16 +688,13 @@ export class MaloumBrowser extends BaseBrowser {
       await this.waitAndLog(1000, "set category public");
       // install request hook
       await this.page.route("https://api.maloum.com/posts", async (route) => {
-        // console.log("#########################");
         const postData = route.request().postDataJSON();
-        // console.log(route.request().postDataJSON());
         await this.page.unroute("https://api.maloum.com/posts");
-        // console.log("#########################");
         await route.continue({
           postData: {
             ...postData,
             public: free,
-            mediaIds: [mediaIds],
+            mediaIds: mediaIds,
             scheduledAt: moment().isAfter(scheduledAt, "hour")
               ? moment().add(1, "hour").utc().toISOString()
               : moment(scheduledAt).utc().toISOString(),
@@ -952,7 +729,7 @@ export class MaloumBrowser extends BaseBrowser {
     }
   }
 
-  public async publishPostV2(
+  public async publishPost(
     title: string,
     tags: string[],
     mediaId: string,
@@ -1001,17 +778,13 @@ export class MaloumBrowser extends BaseBrowser {
       await this.waitAndLog(1000, "set category public");
       // install request hook
       await this.page.route("https://api.maloum.com/posts", async (route) => {
-        // console.log("#########################");
         const postData = route.request().postDataJSON();
-        // console.log(route.request().postDataJSON());
         await this.page.unroute("https://api.maloum.com/posts");
-        // console.log("#########################");
         await route.continue({
           postData: {
             ...postData,
             public: free,
             mediaIds: [mediaId],
-            // scheduledAt: moment().add(3, "month").utc().toISOString(),
           },
         });
       });
@@ -1043,7 +816,7 @@ export class MaloumBrowser extends BaseBrowser {
     }
   }
 
-  public async uploadMediaInFolderV2(
+  public async uploadMediaInFolder(
     folder: string,
     image: string
   ): Promise<string> {

@@ -91,7 +91,7 @@ export class MaloumBot extends PostBot {
     // return mediaId;
     const image = await this.downloadFile(media.name);
     this.logger.info(`download media(${media.name})`);
-    let mediaId = await this.browser.uploadMediaInFolderV2(folderName, image);
+    let mediaId = await this.browser.uploadMediaInFolder(folderName, image);
     if (!mediaId) throw new BotError("get media failed");
     return mediaId;
   }
@@ -137,7 +137,7 @@ export class MaloumBot extends PostBot {
         });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      await this.browser.publishPostV2(
+      await this.browser.publishPost(
         content.title,
         content.postTags,
         mediaId
@@ -314,7 +314,7 @@ export class MaloumBot extends PostBot {
         message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`,
         targets: mediaIds,
       });
-      const postId = await this.browser.schedulePostV2(
+      const postId = await this.browser.schedulePost(
         new Date(post.scheduledAt),
         schedule.title,
         schedule.tags,
@@ -404,7 +404,7 @@ export class MaloumBot extends PostBot {
         return true;
       }
       const image = await this.downloadFile(content.media[0].name);
-      const mediaId = await this.browser.uploadMediaInFolderV2(
+      const mediaId = await this.browser.uploadMediaInFolder(
         content.folder,
         image
       );
