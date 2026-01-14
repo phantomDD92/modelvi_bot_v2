@@ -1,8 +1,21 @@
 import moment from "moment";
 import { MaloumBrowser } from "../browser/maloum-browser";
 import { PostApiService } from "../services/post-service";
-import { ActionType, DEFAULT_LIVING_POSTS, POST_LIMITED, PostResultType, ScheduleStatus } from "../types/constant";
-import { IBotConfig, ICommentParams, IContent, IMedia, ISchedulePost, IScheduleResult } from "../types/interface";
+import {
+  ActionType,
+  DEFAULT_LIVING_POSTS,
+  POST_LIMITED,
+  PostResultType,
+  ScheduleStatus,
+} from "../types/constant";
+import {
+  IBotConfig,
+  ICommentParams,
+  IContent,
+  IMedia,
+  ISchedulePost,
+  IScheduleResult,
+} from "../types/interface";
 import { BotError, SessionTimeoutError } from "../utils/error";
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
@@ -12,7 +25,7 @@ export class MaloumBot extends PostBot {
   protected service!: PostApiService;
 
   constructor(config: IBotConfig, logger: Logger) {
-    super(config, logger)
+    super(config, logger);
   }
 
   // init headless browser
@@ -23,7 +36,7 @@ export class MaloumBot extends PostBot {
 
   // init api service
   protected async initService(): Promise<void> {
-    this.service = new PostApiService(this.config, this.logger)
+    this.service = new PostApiService(this.config, this.logger);
     await super.initService();
   }
 
@@ -41,13 +54,17 @@ export class MaloumBot extends PostBot {
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
       const postRemains = this.settings.params?.postRemains || [];
       const postIds: string[] = await this.browser.getSelfPosts();
-      const postsPublished = postIds.filter(postId => postRemains.includes(postId));
-      this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`);
+      const postsPublished = postIds.filter((postId) =>
+        postRemains.includes(postId)
+      );
+      this.logger.info(
+        `submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`
+      );
       while (postsPublished.length > postCount) {
-        const postDeleting = postsPublished.pop()
+        const postDeleting = postsPublished.pop();
         if (postDeleting) {
           await this.browser.deletePost(postDeleting);
-          deleteIds.push(postDeleting)
+          deleteIds.push(postDeleting);
           this.logger.info(`delete the post(${postDeleting})`);
         }
       }
@@ -55,67 +72,96 @@ export class MaloumBot extends PostBot {
     } catch (error: any) {
       if (error instanceof SessionTimeoutError)
         await this.browser.refreshSession();
-      this.logger.notifyError(error)
+      this.logger.notifyError(error);
       return deleteIds;
     }
   }
 
   private async getMedia(folderName: string, media: IMedia): Promise<string> {
-    const folder = await this.browser.getFolder(folderName);
-    let mediaId = media?.uuid;
-    if (mediaId)
-      mediaId = await this.browser.findMediaInFolder(folder, mediaId)
-    if (!mediaId) {
-      const image = await this.downloadFile(media.name);
-      this.logger.info(`download media(${media.name})`);
-      mediaId = await this.browser.uploadMediaInFolder(folder, image);
-    }
-    if (!mediaId)
-      throw new BotError("get media failed");
-    return mediaId
+    // const folder = await this.browser.getFolder(folderName);
+    // let mediaId = media?.uuid;
+    // if (mediaId)
+    //   mediaId = await this.browser.findMediaInFolder(folder, mediaId);
+    // if (!mediaId) {
+    //   const image = await this.downloadFile(media.name);
+    //   this.logger.info(`download media(${media.name})`);
+    //   mediaId = await this.browser.uploadMediaInFolder(folder, image);
+    // }
+    // if (!mediaId) throw new BotError("get media failed");
+    // return mediaId;
+    const image = await this.downloadFile(media.name);
+    this.logger.info(`download media(${media.name})`);
+    let mediaId = await this.browser.uploadMediaInFolderV2(folderName, image);
+    if (!mediaId) throw new BotError("get media failed");
+    return mediaId;
   }
 
   protected async doPost(): Promise<boolean> {
     let postId;
-    let deleteIds: string[] = []
-    if (!this.settings.params?.contents || this.settings.params.contents.length == 0) {
+    let deleteIds: string[] = [];
+    if (
+      !this.settings.params?.contents ||
+      this.settings.params.contents.length == 0
+    ) {
       this.logger.info(`account has no content to post`);
-      await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
+      await this.service.updatePostResult(
+        PostResultType.SUCCESS,
+        postId,
+        deleteIds
+      );
       return true;
     }
     const contents = this.settings.params.contents;
     let postIndex = this.settings.params.postContentIndex || 0;
-    if (postIndex >= contents.length)
-      postIndex = 0;
+    if (postIndex >= contents.length) postIndex = 0;
     const content: IContent = contents[postIndex];
     const media = content.media[0];
     try {
-      await this.browser.refreshSession();
-      deleteIds = await this.deleteOldPosts();
-      if (deleteIds.length > 0) {
-        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
-      }
+      // await this.browser.refreshSession();
+
+      /// need update
+      // deleteIds = await this.deleteOldPosts();
+      // if (deleteIds.length > 0) {
+      //   await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
+      // }
+      /// need update
+
       let folderName = content.folder;
-      if (!folderName || folderName == "")
-        folderName = "Posts";
-      let mediaId = await this.getMedia(folderName, media)
+      let mediaId = await this.getMedia(folderName, media);
       if (mediaId != media.uuid) {
-        await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
+        await this.service.createLog({
+          success: true,
+          action: ActionType.POST,
+          message: `upload ${postIndex + 1}st media(${content.title})`,
+          target: mediaId,
+        });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      const postId = await this.browser.publishPost(content.title, content.postTags, mediaId)
-      if (postId == POST_LIMITED) {
-        await this.service.createLog({ success: false, action: ActionType.POST, message: `limited to create ${postIndex + 1}st post(${content.title})` });
-        this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds, moment().add(1, "day").startOf("day").toDate());
-      } else {
-        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
-        this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
-      }
+      await this.browser.publishPostV2(
+        content.title,
+        content.postTags,
+        mediaId
+      );
+      await this.service.createLog({
+        success: true,
+        action: ActionType.POST,
+        message: `create ${postIndex + 1}st post(${content.title})`,
+        target: postId,
+      });
+      this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds);
-      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})` });
+      await this.service.updatePostResult(
+        PostResultType.FAILED,
+        undefined,
+        deleteIds
+      );
+      await this.service.createLog({
+        success: false,
+        action: ActionType.POST,
+        message: `failed to create ${postIndex + 1}st post(${content.title})`,
+      });
       return false;
     }
   }
@@ -125,48 +171,58 @@ export class MaloumBot extends PostBot {
     let post;
     try {
       const params: ICommentParams = await this.service.updateCommentSetting();
-      if (params.comments.length === 0)
-        return true;
+      if (params.comments.length === 0) return true;
       await this.browser.refreshSession();
       let posts = await this.browser.getRecentPosts();
       posts = posts.reverse();
       let success = false;
       for (post of posts) {
-        if (post.createdBy?.contentSettings?.canCreatorsComment && post.createdBy.username != this.config.alias && !params.block_users.includes(post.createdBy.username)) {
-          await this.browser.followPost(post._id)
+        if (
+          post.createdBy?.contentSettings?.canCreatorsComment &&
+          post.createdBy.username != this.config.alias &&
+          !params.block_users.includes(post.createdBy.username)
+        ) {
+          await this.browser.followPost(post._id);
           const comment = this.pickup(params.comments);
           await this.browser.commentPost(post._id, comment);
-          await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `comment ${post.createdBy.username}'s post`, target: post._id });
+          await this.service.createLog({
+            success: true,
+            action: ActionType.COMMENT,
+            message: `comment ${post.createdBy.username}'s post`,
+            target: post._id,
+          });
           success = true;
           break;
         }
       }
-      if (success)
-        return true;
+      if (success) return true;
       for (post of posts) {
-        if (!post.createdBy?.contentSettings?.canCreatorsComment && post.createdBy.username != this.config.alias && !params.block_users.includes(post.createdBy.username)) {
-          await this.browser.followPost(post._id)
-          await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `follow ${post.createdBy.username}'s post`, target: post._id });
+        if (
+          !post.createdBy?.contentSettings?.canCreatorsComment &&
+          post.createdBy.username != this.config.alias &&
+          !params.block_users.includes(post.createdBy.username)
+        ) {
+          await this.browser.followPost(post._id);
+          await this.service.createLog({
+            success: true,
+            action: ActionType.COMMENT,
+            message: `follow ${post.createdBy.username}'s post`,
+            target: post._id,
+          });
           success = true;
           break;
         }
       }
       return true;
     } catch (error: any) {
-      this.logger.notifyError(error)
-      await this.service.createLog({ success: false, action: ActionType.COMMENT, message: "failed to create a comment" });
+      this.logger.notifyError(error);
+      await this.service.createLog({
+        success: false,
+        action: ActionType.COMMENT,
+        message: "failed to create a comment",
+      });
       if (error instanceof SessionTimeoutError)
         await this.browser.refreshSession();
-      return false;
-    }
-  }
-
-  protected async doTest(): Promise<boolean> {
-    try {
-      this.tested = true;
-      return true;
-    } catch (error) {
-      console.error(error);
       return false;
     }
   }
@@ -176,7 +232,7 @@ export class MaloumBot extends PostBot {
       await this.service.updateChatSetting();
       const messages = await this.browser.getUnreadChats();
       if (messages.length > 0) {
-        this.logger.info(`find ${messages.length} unread messages`)
+        this.logger.info(`find ${messages.length} unread messages`);
         await this.sendChatNotification(messages);
       }
       return true;
@@ -184,7 +240,7 @@ export class MaloumBot extends PostBot {
       this.logger.notifyError(error);
       if (error instanceof SessionTimeoutError)
         await this.browser.refreshSession();
-      return true
+      return true;
     }
   }
 
@@ -193,7 +249,13 @@ export class MaloumBot extends PostBot {
       const revenue = await this.browser.getMonthlyEarnings();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true });
+        await this.service.createLog({
+          success: false,
+          action: ActionType.LOGIN,
+          message: `bot closed due to no balance`,
+          error: "no balance",
+          notified: true,
+        });
       return available;
     } catch (error: any) {
       this.logger.notifyError(error);
@@ -201,19 +263,31 @@ export class MaloumBot extends PostBot {
     }
   }
 
-  private async checkPublishedSchedules(schedules: ISchedulePost[]): Promise<IScheduleResult[]> {
+  private async checkPublishedSchedules(
+    schedules: ISchedulePost[]
+  ): Promise<IScheduleResult[]> {
     const postIds = await this.browser.getSelfPosts();
-    const schedulePostIds = schedules.filter(element => element.post != undefined).map(element => element.post);
+    const schedulePostIds = schedules
+      .filter((element) => element.post != undefined)
+      .map((element) => element.post);
     if (schedulePostIds.length == 0) {
       this.logger.info(`no published posts among ${postIds.length} posts`);
-      return []
+      return [];
     }
-    const publishedPosts = postIds.filter(postId => schedulePostIds.includes(postId));
-    const results = publishedPosts.map(post => {
-      const schedule = schedules.find(element => element.post == post)
-      return ({ id: schedule?._id, post: schedule?.post, status: ScheduleStatus.FINISHED });
-    })
-    this.logger.info(`${results.length} published posts among ${postIds.length} posts`);
+    const publishedPosts = postIds.filter((postId) =>
+      schedulePostIds.includes(postId)
+    );
+    const results = publishedPosts.map((post) => {
+      const schedule = schedules.find((element) => element.post == post);
+      return {
+        id: schedule?._id,
+        post: schedule?.post,
+        status: ScheduleStatus.FINISHED,
+      };
+    });
+    this.logger.info(
+      `${results.length} published posts among ${postIds.length} posts`
+    );
     return results;
   }
 
@@ -232,16 +306,44 @@ export class MaloumBot extends PostBot {
       if (mediaIds.length == 0)
         throw new BotError("publish schedule failed", {
           where: "MaloumBot::publishSchedule",
-          error: "no media uploaded"
-        })
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`, targets: mediaIds });
-      const postId = await this.browser.schedulePost(new Date(post.scheduledAt), schedule.title, schedule.tags, mediaIds, schedule.type)
-      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
-      await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
+          error: "no media uploaded",
+        });
+      await this.service.createLog({
+        success: true,
+        action: ActionType.SCHEDULE,
+        message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`,
+        targets: mediaIds,
+      });
+      const postId = await this.browser.schedulePostV2(
+        new Date(post.scheduledAt),
+        schedule.title,
+        schedule.tags,
+        mediaIds,
+        schedule.type
+      );
+      await this.service.createLog({
+        success: true,
+        action: ActionType.SCHEDULE,
+        message: `create schedule post(${schedule.title})`,
+        // target: postId,
+      });
+      await this.service.updateScheduleResult({
+        id: post._id,
+        // post: postId,
+        status: ScheduleStatus.FINISHED,
+      });
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
-      await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
+      await this.service.createLog({
+        success: false,
+        action: ActionType.SCHEDULE,
+        message: `failed to create schedule post(${schedule.title})`,
+      });
+      await this.service.updateScheduleResult({
+        id: post._id,
+        status: ScheduleStatus.FAILED,
+        reason: "internal error",
+      });
     }
   }
 
@@ -250,24 +352,29 @@ export class MaloumBot extends PostBot {
       let results: IScheduleResult[] = [];
       // update next schedule time and get schedule list
       const schedules = await this.service.updateScheduleSetting();
-      const waitingSchedules = schedules.filter(schedule => schedule.status == ScheduleStatus.WAITING);
-      const scheduledSchedules = schedules.filter(schedule => schedule.status == ScheduleStatus.SCHEDULED);
-      this.logger.info(`waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`);
-      // check published schedules
-      if (scheduledSchedules.length > 0)
-        results = await this.checkPublishedSchedules(scheduledSchedules);
-      // update schedules status
-      if (results.length > 0) {
-        await this.service.updateScheduleResults(results);
-        this.logger.info(`update ${results.length} scheduled posts`)
-      }
+      const waitingSchedules = schedules.filter(
+        (schedule) => schedule.status == ScheduleStatus.WAITING
+      );
+      const scheduledSchedules = schedules.filter(
+        (schedule) => schedule.status == ScheduleStatus.SCHEDULED
+      );
+      this.logger.info(
+        `waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`
+      );
+      // // check published schedules
+      // if (scheduledSchedules.length > 0)
+      //   results = await this.checkPublishedSchedules(scheduledSchedules);
+      // // update schedules status
+      // if (results.length > 0) {
+      //   await this.service.updateScheduleResults(results);
+      //   this.logger.info(`update ${results.length} scheduled posts`);
+      // }
       // schedule waiting schedules
       let count = 0;
       for (var schedule of waitingSchedules) {
         await this.publishSchedule(schedule);
         count += 1;
-        if (count >= 3)
-          break;
+        if (count >= 3) break;
       }
       return true;
     } catch (error) {
@@ -277,8 +384,35 @@ export class MaloumBot extends PostBot {
   }
 
   protected needStory(): boolean {
-    return false
+    return false;
   }
 
+  protected needComment(): boolean {
+    return false;
+  }
 
+  protected needTest(): boolean {
+    return false;
+  }
+
+  protected async doTest(): Promise<boolean> {
+    try {
+      this.tested = true;
+      const content = this.settings.params?.contents[0];
+      if (!content) {
+        this.logger.info("no free contents");
+        return true;
+      }
+      const image = await this.downloadFile(content.media[0].name);
+      const mediaId = await this.browser.uploadMediaInFolderV2(
+        content.folder,
+        image
+      );
+      this.logger.info(`media Id: ${mediaId}`);
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  }
 }

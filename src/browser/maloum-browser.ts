@@ -15,7 +15,6 @@ import {
 import {
   IMaloumCategory,
   IMaloumChat,
-  IMaloumEarning,
   IMaloumFolder,
   IMaloumMediaInfo,
   IMaloumPost,
@@ -767,6 +766,17 @@ export class MaloumBrowser extends BaseBrowser {
         .map((cat) => cat._id);
       let free = true;
       if (type == PostType.FANS || type == PostType.PAID) free = false;
+
+      // --- go to create post page
+      await this.page.goto("https://app.maloum.com/post/create");
+      // --- set media for post
+      // click add media button
+      await this.page
+        .locator("form button", { hasText: "Add media" })
+        .first()
+        .click();
+      // select all medias folder
+      await this.page.locator("div[title='All media']").first().click();
       const resp = await this.page.request.post(
         "https://api.maloum.com/posts",
         {
@@ -779,28 +789,28 @@ export class MaloumBrowser extends BaseBrowser {
           },
         }
       );
-      if (!resp.ok()) {
-        if (resp.status() == HttpStatusCode.TooManyRequests)
-          return POST_LIMITED;
-        if (resp.status() == HttpStatusCode.Unauthorized)
-          throw new SessionTimeoutError("session timeout", {
-            where: "MaloumBrowser::publishPost",
-          });
+      // if (!resp.ok()) {
+      //   if (resp.status() == HttpStatusCode.TooManyRequests)
+      //     return POST_LIMITED;
+      //   if (resp.status() == HttpStatusCode.Unauthorized)
+      //     throw new SessionTimeoutError("session timeout", {
+      //       where: "MaloumBrowser::publishPost",
+      //     });
 
-        throw new BotError("publish post failed", {
-          where: "MaloumBrowser::publishPost",
-          method: "POST",
-          endpoint: `https://api.maloum.com/posts`,
-          status: resp.statusText(),
-          response: await resp.text(),
-          params: {
-            caption: title,
-            categories: cats.slice(0, 3),
-            public: free,
-            mediaIds: [mediaId],
-          },
-        });
-      }
+      //   throw new BotError("publish post failed", {
+      //     where: "MaloumBrowser::publishPost",
+      //     method: "POST",
+      //     endpoint: `https://api.maloum.com/posts`,
+      //     status: resp.statusText(),
+      //     response: await resp.text(),
+      //     params: {
+      //       caption: title,
+      //       categories: cats.slice(0, 3),
+      //       public: free,
+      //       mediaIds: [mediaId],
+      //     },
+      //   });
+      // }
       const respData: IMaloumPost = await resp.json();
       return respData._id;
     } catch (error: any) {
@@ -842,6 +852,301 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("get earnings failed", {
         where: "MaloumBrowser::getMonthlyEarnings",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async schedulePostV2(
+    scheduledAt: Date,
+    title: string,
+    tags: string[],
+    mediaIds: string[],
+    type?: number
+  ): Promise<void> {
+    try {
+      let free = true;
+      if (type == PostType.FANS || type == PostType.PAID) free = false;
+      // --- go to create post page
+      await this.page.goto("https://app.maloum.com/post/create");
+      // --- set media for post
+      // click add media button
+      await this.page
+        .locator("form button", { hasText: "Add media" })
+        .first()
+        .click();
+      await this.waitAndLog(1000, "add media click");
+      // select all medias folder
+      await this.page.locator("div[title='All media']").first().click();
+      // select first image
+      await this.page
+        .locator("div#rightColumn > div > div > div > div.grid > div")
+        .first()
+        .locator("button")
+        .last()
+        .click();
+
+      // click next button
+      await this.page
+        .locator("div#rightColumn button", { hasText: "Next" })
+        .first()
+        .click();
+      await this.waitAndLog(1000, "select first image");
+      // set post title
+      await this.page.locator("textarea[name='caption']").first().fill(title);
+      await this.waitAndLog(1000, "set post title");
+      // select category
+      await this.page
+        .locator("div[data-testid='select-categories-button']")
+        .first()
+        .click();
+      await this.waitAndLog(1000, "select category");
+      await this.page.locator("input").last().fill("Public");
+      await this.page.locator("button", { hasText: "Public" }).first().click();
+      await this.page.locator("button", { hasText: "Save" }).first().click();
+      await this.waitAndLog(1000, "set category public");
+      // install request hook
+      await this.page.route("https://api.maloum.com/posts", async (route) => {
+        // console.log("#########################");
+        const postData = route.request().postDataJSON();
+        // console.log(route.request().postDataJSON());
+        await this.page.unroute("https://api.maloum.com/posts");
+        // console.log("#########################");
+        await route.continue({
+          postData: {
+            ...postData,
+            public: free,
+            mediaIds: [mediaIds],
+            scheduledAt: moment().isAfter(scheduledAt, "hour")
+              ? moment().add(1, "hour").utc().toISOString()
+              : moment(scheduledAt).utc().toISOString(),
+          },
+        });
+      });
+      const respPromise = this.page.waitForResponse(
+        "https://api.maloum.com/posts"
+      );
+      // click publish button
+      await this.page
+        .locator("button[data-testid='create-post-button']")
+        .first()
+        .click();
+      const resp = await respPromise;
+      if (!resp.ok()) {
+        throw new BotError("publish post failed", {
+          where: "MaloumBrowser::publishPost",
+          method: "POST",
+          endpoint: "https://api.maloum.com/users/balance",
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
+    } catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("publish post failed", {
+        where: "MaloumBrowser::publishPost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async publishPostV2(
+    title: string,
+    tags: string[],
+    mediaId: string,
+    type?: number
+  ): Promise<void> {
+    try {
+      let free = true;
+      if (type == PostType.FANS || type == PostType.PAID) free = false;
+      // --- go to create post page
+      await this.page.goto("https://app.maloum.com/post/create");
+      // --- set media for post
+      // click add media button
+      await this.page
+        .locator("form button", { hasText: "Add media" })
+        .first()
+        .click();
+      await this.waitAndLog(1000, "add media click");
+      // select all medias folder
+      await this.page.locator("div[title='All media']").first().click();
+      // select first image
+      await this.page
+        .locator("div#rightColumn > div > div > div > div.grid > div")
+        .first()
+        .locator("button")
+        .last()
+        .click();
+
+      // click next button
+      await this.page
+        .locator("div#rightColumn button", { hasText: "Next" })
+        .first()
+        .click();
+      await this.waitAndLog(1000, "select first image");
+      // set post title
+      await this.page.locator("textarea[name='caption']").first().fill(title);
+      await this.waitAndLog(1000, "set post title");
+      // select category
+      await this.page
+        .locator("div[data-testid='select-categories-button']")
+        .first()
+        .click();
+      await this.waitAndLog(1000, "select category");
+      await this.page.locator("input").last().fill("Public");
+      await this.page.locator("button", { hasText: "Public" }).first().click();
+      await this.page.locator("button", { hasText: "Save" }).first().click();
+      await this.waitAndLog(1000, "set category public");
+      // install request hook
+      await this.page.route("https://api.maloum.com/posts", async (route) => {
+        // console.log("#########################");
+        const postData = route.request().postDataJSON();
+        // console.log(route.request().postDataJSON());
+        await this.page.unroute("https://api.maloum.com/posts");
+        // console.log("#########################");
+        await route.continue({
+          postData: {
+            ...postData,
+            public: free,
+            mediaIds: [mediaId],
+            // scheduledAt: moment().add(3, "month").utc().toISOString(),
+          },
+        });
+      });
+      const respPromise = this.page.waitForResponse(
+        "https://api.maloum.com/posts"
+      );
+      // click publish button
+      await this.page
+        .locator("button[data-testid='create-post-button']")
+        .first()
+        .click();
+      const resp = await respPromise;
+      if (!resp.ok()) {
+        throw new BotError("publish post failed", {
+          where: "MaloumBrowser::publishPost",
+          method: "POST",
+          endpoint: "https://api.maloum.com/users/balance",
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      }
+    } catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("publish post failed", {
+        where: "MaloumBrowser::publishPost",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async uploadMediaInFolderV2(
+    folder: string,
+    image: string
+  ): Promise<string> {
+    try {
+      // go to vault page
+      await this.page.goto("https://app.maloum.com/vault", {
+        waitUntil: "load",
+        timeout: 120000,
+      });
+      // search folder
+      await this.page
+        .locator("div#leftColumn input[placeholder='Search for folder']")
+        .first()
+        .fill(folder.toLocaleLowerCase());
+      await this.wait(3000);
+      const count = await this.page
+        .locator("div#leftColumn div.truncate")
+        .count();
+      // if not find folder, create folder
+      if (count == 0) {
+        await this.page
+          .locator("div#leftColumn button", {
+            hasText: "New folder",
+          })
+          .first()
+          .click();
+        await this.page
+          .locator("div[role='dialog'] form input[name='folderName']")
+          .first()
+          .fill(folder);
+        await this.page
+          .locator("div[role='dialog'] form button", {
+            hasText: "Create folder",
+          })
+          .first()
+          .click();
+        await this.wait(500);
+      } else {
+        // if not match, create folder, or if match select folder
+        const searchedFolder: string =
+          (await this.page
+            .locator("div#leftColumn div.truncate")
+            .first()
+            .textContent()) || "";
+        if (searchedFolder.toLocaleLowerCase() != folder.toLocaleLowerCase()) {
+          await this.page
+            .locator("div#leftColumn button", {
+              hasText: "New folder",
+            })
+            .first()
+            .click();
+          await this.page
+            .locator("div[role='dialog'] form input[name='folderName']")
+            .first()
+            .fill(folder);
+          await this.page
+            .locator("div[role='dialog'] form button", {
+              hasText: "Create folder",
+            })
+            .first()
+            .click();
+          await this.wait(500);
+        } else {
+          await this.page
+            .locator("div#leftColumn div.truncate")
+            .first()
+            .click();
+        }
+      }
+      // create api response listener
+      const uploadPromise = this.page.waitForResponse(
+        (response) => {
+          return (
+            response
+              .url()
+              .includes("https://api.maloum.com/uploads/generate-upload-url") &&
+            response.request().method() === "POST"
+          );
+        },
+        { timeout: 600000 }
+      );
+      // upload image
+      await this.page
+        .locator("div#rightColumn input[type='file']")
+        .first()
+        .setInputFiles(image);
+      // wait uploading api respone
+      const uploadResp = await uploadPromise;
+      if (!uploadResp.ok()) {
+        throw new BotError("upload media failed", {
+          where: "MaloumBrowser::uploadMediaInFolder",
+          method: "POST",
+          endpoint: `https://api.maloum.com/uploads/generate-upload-url`,
+          status: uploadResp.statusText(),
+          response: await uploadResp.text(),
+        });
+      }
+      const uploadData = await uploadResp.json();
+      return uploadData.id;
+    } catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("upload media failed", {
+        where: "MaloumBrowser::uploadMediaInFolder",
         error: error.message,
         stack: error.stack,
       });
