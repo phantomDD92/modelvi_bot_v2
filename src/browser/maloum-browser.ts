@@ -122,10 +122,10 @@ export class MaloumBrowser extends BaseBrowser {
   // set content filter
   protected async setFilter() {
     // filter images
-    await this.context.route(
-      /(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/,
-      (route) => route.abort()
-    );
+    // await this.context.route(
+    //   /(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/,
+    //   (route) => route.abort()
+    // );
     // filter google analytics
     await this.context.route(
       /https:\/\/www\.google-analytics\.com\/.*/,

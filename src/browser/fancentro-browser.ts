@@ -510,13 +510,16 @@ export class FancentroBrowser extends BaseBrowser {
       const token = urlObj.searchParams.get('token');
       this.token = token || "";
       let tagIds: number[] = [];
+      let tagInfos: { id: number, name: string }[] = [];
       let postTags: string[] = tags;
       if (tags.length < 3)
         postTags.push("sexy", "hot", "booty");
       for (var tag of postTags) {
         const tagId = await this.getTagId(tag);
-        if (tagId && !tagIds.includes(tagId))
+        if (tagId && !tagIds.includes(tagId)) {
           tagIds.push(tagId)
+          tagInfos.push({ id: tagId, name: tag });
+        }
       }
       let params;
       switch (postType) {
@@ -527,9 +530,9 @@ export class FancentroBrowser extends BaseBrowser {
             "published_at": moment().isAfter(scheduledAt, "hour") ? moment().add(1, "hour").format('YYYY-MM-DD HH:mm:ss') : moment(scheduledAt).format('YYYY-MM-DD HH:mm:ss'),
             "expired_at": "",
             "privacy": "paid_subscribers",
-            "price": 0,
             "publication_channel": "instant",
             "tagIds": tagIds,
+            "tags": tagInfos,
             "media": mediaIds.map((mediaId, index) => ({ "id": mediaId, "isFreePreview": false, "order": index + 1 })),
             "token": this.token
           }
@@ -541,9 +544,10 @@ export class FancentroBrowser extends BaseBrowser {
             "published_at": moment().isAfter(scheduledAt, "hour") ? moment().add(1, "hour").format('YYYY-MM-DD HH:mm:ss') : moment(scheduledAt).format('YYYY-MM-DD HH:mm:ss'),
             "expired_at": "",
             "privacy": "paid_subscribers",
-            "price": price || 0,
+            "price": `${price || 0}`,
             "publication_channel": "instant",
             "tagIds": tagIds,
+            "tags": tagInfos,
             "media": mediaIds.map((mediaId, index) => ({ "id": mediaId, "isFreePreview": false, "order": index + 1 })),
             "token": this.token
           }
@@ -557,6 +561,7 @@ export class FancentroBrowser extends BaseBrowser {
             "privacy": "public",
             "publication_channel": "instant",
             "tagIds": tagIds,
+            "tags": tagInfos,
             "media": mediaIds.map((mediaId, index) => ({ "id": mediaId, "isFreePreview": false, "order": index + 1 })),
             "token": this.token
           }
@@ -570,7 +575,7 @@ export class FancentroBrowser extends BaseBrowser {
         where: "FancentroBrowser::schedulePost",
         method: "POST",
         endpoint: "https://fancentro.mainhub.com/posts/create",
-        params,
+        params: JSON.stringify(params),
         status: resp.statusText(),
         response: await resp.text()
       });
@@ -579,7 +584,7 @@ export class FancentroBrowser extends BaseBrowser {
         where: "FancentroBrowser::schedulePost",
         method: "POST",
         endpoint: "https://fancentro.mainhub.com/posts/create",
-        params,
+        params:JSON.stringify(params),
         status: resp.statusText(),
         response: await resp.text()
       });
