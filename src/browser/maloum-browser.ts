@@ -898,6 +898,7 @@ export class MaloumBrowser extends BaseBrowser {
         },
         { timeout: 600000 }
       );
+      const completePromise = this.page.waitForResponse(response => response.url().includes("https://api.maloum.com/vault/folders/"), { timeout: 600000 });
       // upload image
       await this.page
         .locator("div#rightColumn input[type='file']")
@@ -915,6 +916,8 @@ export class MaloumBrowser extends BaseBrowser {
         });
       }
       const uploadData = await uploadResp.json();
+      await completePromise;
+      await this.page.waitForTimeout(10000);
       return uploadData.id;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
