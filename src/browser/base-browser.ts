@@ -73,10 +73,18 @@ export abstract class BaseBrowser {
           })
         );
         chromium.use(StealthPlugin());
-        this.browser = await chromium.launch({
-          headless: !this.config.debug,
-          proxy,
-        });
+        if (this.config.debug)
+          this.browser = await chromium.launch({
+            headless: !this.config.debug,
+            args: ["--window-position=500,1000"],
+            devtools: true,
+            proxy,
+          });
+        else
+          this.browser = await chromium.launch({
+            headless: !this.config.debug,
+            proxy,
+          });
         break;
     }
 
@@ -128,6 +136,10 @@ export abstract class BaseBrowser {
       await this.page.goto("https://www.google.com", {
         waitUntil: "domcontentloaded",
       });
+
+      if (this.config.debug) {
+        await this.page.waitForTimeout(10000);
+      }
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
         where: "BaseBrowser::checkProxy",
