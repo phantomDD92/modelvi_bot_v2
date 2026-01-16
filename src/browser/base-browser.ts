@@ -76,7 +76,7 @@ export abstract class BaseBrowser {
         if (this.config.debug)
           this.browser = await chromium.launch({
             headless: !this.config.debug,
-            args: ["--window-position=500,1000"],
+            args: ["--window-position=500,900"],
             devtools: true,
             proxy,
           });
