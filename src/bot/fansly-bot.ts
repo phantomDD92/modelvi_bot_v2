@@ -261,14 +261,15 @@ export class FanslyBot extends PostBot {
         previewId = await this.getMedia(schedule.folder, schedule.preview);
         await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload schedule preview(${schedule.title})` });
       }
-      let contentId;
+      let contentId, contentType = 1;
       if (mediaIds.length > 1) {
         contentId = await this.browser.createBundle(mediaIds, schedule.type, schedule.price, previewId);
+        contentType = 2;
       } else {
         contentId = await this.browser.createContent(mediaIds[0], schedule.type, schedule.price, previewId);
       }
       this.logger.info(`create content(${contentId}) for scheduled post`);
-      const postId = await this.browser.schedulePost(schedule.title, schedule.tags, contentId, new Date(post.scheduledAt));
+      const postId = await this.browser.schedulePost(schedule.title, schedule.tags, contentId, contentType, new Date(post.scheduledAt));
       await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId });
       await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED })
     } catch (error) {

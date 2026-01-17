@@ -706,14 +706,14 @@ export class FanslyBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePost(title: string, tags: string[], contentId: string, scheduledAt: Date): Promise<string | undefined> {
+  public async schedulePost(title: string, tags: string[], contentId: string, contentType:number, scheduledAt: Date): Promise<string | undefined> {
     try {
       const params = {
         "content": tags.length > 0 ? `${title}\n\n${tags.map(tag => `#${tag}`).join(" ")}` : title,
         "fypFlags": 0,
         "inReplyTo": null,
         "quotedPostId": null,
-        "attachments": [{ "contentId": contentId, "contentType": 2, "pos": 0 }],
+        "attachments": [{ "contentId": contentId, "contentType": contentType, "pos": 0 }],
         "scheduledFor": moment().isAfter(scheduledAt, "hour") ? moment().add(1, "hour").toDate().getTime() : scheduledAt.getTime(),
         "expiresAt": 0,
         "postReplyPermissionFlags": [],
