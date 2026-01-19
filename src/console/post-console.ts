@@ -68,7 +68,7 @@ export class PostBotConsole {
   }
 
   protected async startBot(bot: IBotInfo) {
-    const proc = cp.spawn('node', [this.config.bot_path, this.config.platform, bot.alias]);
+    const proc = cp.spawn('node', [this.config.bot_path, this.config.platform, `"${bot.alias}"`]);
     if (proc.pid) {
       this.running_processes.push({ _id: bot._id, alias: bot.alias, pid: proc.pid });
       this.logger.info(`START ${bot.alias}`);
