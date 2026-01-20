@@ -55,10 +55,10 @@ export class MaloumBot extends PostBot {
       const postRemains = this.settings.params?.postRemains || [];
       const postIds: string[] = await this.browser.getSelfPosts();
       const postsPublished = postIds.filter((postId) =>
-        postRemains.includes(postId)
+        postRemains.includes(postId),
       );
       this.logger.info(
-        `submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`
+        `submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`,
       );
       while (postsPublished.length > postCount) {
         const postDeleting = postsPublished.pop();
@@ -107,7 +107,7 @@ export class MaloumBot extends PostBot {
       await this.service.updatePostResult(
         PostResultType.SUCCESS,
         postId,
-        deleteIds
+        deleteIds,
       );
       return true;
     }
@@ -137,11 +137,26 @@ export class MaloumBot extends PostBot {
         });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      await this.browser.publishPost(
+      const result = await this.browser.publishPost(
         content.title,
         content.postTags,
-        mediaId
+        mediaId,
       );
+      if (result == POST_LIMITED) {
+        await this.service.createLog({
+          success: false,
+          action: ActionType.POST,
+          message: `limited to create ${postIndex + 1}st post(${content.title})`,
+          target: postId,
+        });
+        await this.service.updatePostResult(
+          PostResultType.SUCCESS,
+          undefined,
+          deleteIds,
+          moment().add(1, "day").startOf("day").toDate(),
+        );
+        return true;
+      }
       await this.service.createLog({
         success: true,
         action: ActionType.POST,
@@ -155,7 +170,7 @@ export class MaloumBot extends PostBot {
       await this.service.updatePostResult(
         PostResultType.FAILED,
         undefined,
-        deleteIds
+        deleteIds,
       );
       await this.service.createLog({
         success: false,
@@ -264,7 +279,7 @@ export class MaloumBot extends PostBot {
   }
 
   private async checkPublishedSchedules(
-    schedules: ISchedulePost[]
+    schedules: ISchedulePost[],
   ): Promise<IScheduleResult[]> {
     const postIds = await this.browser.getSelfPosts();
     const schedulePostIds = schedules
@@ -275,7 +290,7 @@ export class MaloumBot extends PostBot {
       return [];
     }
     const publishedPosts = postIds.filter((postId) =>
-      schedulePostIds.includes(postId)
+      schedulePostIds.includes(postId),
     );
     const results = publishedPosts.map((post) => {
       const schedule = schedules.find((element) => element.post == post);
@@ -286,7 +301,7 @@ export class MaloumBot extends PostBot {
       };
     });
     this.logger.info(
-      `${results.length} published posts among ${postIds.length} posts`
+      `${results.length} published posts among ${postIds.length} posts`,
     );
     return results;
   }
@@ -319,7 +334,7 @@ export class MaloumBot extends PostBot {
         schedule.title,
         schedule.tags,
         mediaIds,
-        schedule.type
+        schedule.type,
       );
       await this.service.createLog({
         success: true,
@@ -353,13 +368,13 @@ export class MaloumBot extends PostBot {
       // update next schedule time and get schedule list
       const schedules = await this.service.updateScheduleSetting();
       const waitingSchedules = schedules.filter(
-        (schedule) => schedule.status == ScheduleStatus.WAITING
+        (schedule) => schedule.status == ScheduleStatus.WAITING,
       );
       const scheduledSchedules = schedules.filter(
-        (schedule) => schedule.status == ScheduleStatus.SCHEDULED
+        (schedule) => schedule.status == ScheduleStatus.SCHEDULED,
       );
       this.logger.info(
-        `waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`
+        `waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`,
       );
       // // check published schedules
       // if (scheduledSchedules.length > 0)
@@ -406,7 +421,7 @@ export class MaloumBot extends PostBot {
       const image = await this.downloadFile(content.media[0].name);
       const mediaId = await this.browser.uploadMediaInFolder(
         content.folder,
-        image
+        image,
       );
       this.logger.info(`media Id: ${mediaId}`);
       return true;
