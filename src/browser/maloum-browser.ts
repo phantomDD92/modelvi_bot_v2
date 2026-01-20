@@ -711,18 +711,18 @@ export class MaloumBrowser extends BaseBrowser {
         .click();
       const resp = await respPromise;
       if (!resp.ok()) {
-        throw new BotError("publish post failed", {
-          where: "MaloumBrowser::publishPost",
+        throw new BotError("schedule post failed", {
+          where: "MaloumBrowser::schedulePost",
           method: "POST",
-          endpoint: "https://api.maloum.com/users/balance",
+endpoint: "https://api.maloum.com/posts",
           status: resp.statusText(),
           response: await resp.text(),
         });
       }
     } catch (error: any) {
       if (error instanceof BotError) throw error;
-      throw new BotError("publish post failed", {
-        where: "MaloumBrowser::publishPost",
+      throw new BotError("schedule post failed", {
+        where: "MaloumBrowser::schedulePost",
         error: error.message,
         stack: error.stack,
       });
@@ -799,7 +799,7 @@ export class MaloumBrowser extends BaseBrowser {
       const resp = await respPromise;
       const respData = await resp.json();
       if (!resp.ok()) {
-        if (respData.response?.statusCode == 429) 
+        if (respData.statusCode == 429) 
           return POST_LIMITED;
         throw new BotError("publish post failed", {
           where: "MaloumBrowser::publishPost",
