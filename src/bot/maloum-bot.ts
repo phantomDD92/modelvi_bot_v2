@@ -398,19 +398,19 @@ export class MaloumBot extends PostBot {
     return false;
   }
 
-  protected needTest(): boolean {
-    if (this.tested) return false;
-    this.tested = true;
-    return true;
-  }
+  // protected needTest(): boolean {
+  //   if (this.tested) return false;
+  //   this.tested = true;
+  //   return true;
+  // }
 
-  protected needPost(): boolean {
-    return false;
-  }
+  // protected needPost(): boolean {
+  //   return false;
+  // }
 
-  protected needSchedule(): boolean {
-    return false;
-  }
+  // protected needSchedule(): boolean {
+  //   return false;
+  // }
 
   protected async doTest(): Promise<boolean> {
     try {
