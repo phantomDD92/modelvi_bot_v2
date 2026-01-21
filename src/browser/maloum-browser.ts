@@ -515,6 +515,9 @@ export class MaloumBrowser extends BaseBrowser {
       );
       const deletePromise = this.page.waitForResponse(
         /https:\/\/api\.maloum\.com\/posts\/[0-9a-fA-F]{24}/,
+        {
+          timeout: 5000,
+        },
       );
       // click first post delete button
       await this.page
