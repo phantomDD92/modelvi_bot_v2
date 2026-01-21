@@ -1,12 +1,22 @@
 import moment from "moment";
-import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
-import { IFourBasedChat, IFourBasedPost, IFourBasedProfile, IFourBasedUser, IFourBasedVault } from "../types/fourbased";
+import {
+  AuthError,
+  BotError,
+  ProxyError,
+  SessionTimeoutError,
+} from "../utils/error";
+import {
+  IFourBasedChat,
+  IFourBasedPost,
+  IFourBasedProfile,
+  IFourBasedUser,
+  IFourBasedVault,
+} from "../types/fourbased";
 import { IAccountID, IAccountSettings, IChatMessage } from "../types/interface";
 import { BaseBrowser } from "./base-browser";
 import { HttpStatusCode } from "axios";
 
 export class FourBasedBrowser extends BaseBrowser {
-
   protected profile!: IFourBasedProfile;
 
   public async home(): Promise<void> {
@@ -17,23 +27,53 @@ export class FourBasedBrowser extends BaseBrowser {
         where: "FourBasedBrowser::home",
         error: error.message,
         stack: error.stack,
-      })
+      });
     }
   }
 
-  public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
+  // protected async setFilter(): Promise<void> {
+  //   await super.setFilter();
+  //   await this.page.route(/https:\/\/pic2\.4based\.com\/preview\/.*/, (route, request) => {
+  //     // const resourceType = request.resourceType();
+  //     // console.log(`${request.method()} : ${resourceType} : ${request.url()}`);
+  //     // Block images, fonts, stylesheets, etc. as needed
+  //     if (request.method() == "GET") {
+  //       route.abort();
+  //     } else {
+  //       route.continue();
+  //     }
+  //   });
+  // }
+
+  public async login(
+    setting: IAccountSettings,
+  ): Promise<IAccountID | undefined> {
     try {
       await this.page.goto("https://4based.com/login", { timeout: 120000 });
 
       await this.page.locator("input#email").fill(setting.email);
       await this.page.locator("input#current-password").fill(setting.password);
 
-      const loginPromise = this.page.waitForResponse(response => {
-        return response.url().includes("https://rest.4based.com/api/1.0/auth/login") && response.request().method() === "POST"
-      }, { timeout: 180000 });
-      const basePromise = this.page.waitForResponse(response => {
-        return response.url().includes("https://rest.4based.com/api/1.0/base") && response.request().method() === "GET"
-      }, { timeout: 180000 });
+      const loginPromise = this.page.waitForResponse(
+        (response) => {
+          return (
+            response
+              .url()
+              .includes("https://rest.4based.com/api/1.0/auth/login") &&
+            response.request().method() === "POST"
+          );
+        },
+        { timeout: 180000 },
+      );
+      const basePromise = this.page.waitForResponse(
+        (response) => {
+          return (
+            response.url().includes("https://rest.4based.com/api/1.0/base") &&
+            response.request().method() === "GET"
+          );
+        },
+        { timeout: 180000 },
+      );
 
       await this.page.locator("auth-login ion-button.submit-button").click();
       const loginResp = await loginPromise;
@@ -44,7 +84,7 @@ export class FourBasedBrowser extends BaseBrowser {
           endpoint: "https://rest.4based.com/api/1.0/auth/login",
           params: loginResp.request().postDataJSON(),
           status: loginResp.statusText(),
-          response: await loginResp.json()
+          response: await loginResp.json(),
         });
       const loginData = await loginResp.json();
       this.profile = loginData.user;
@@ -55,13 +95,12 @@ export class FourBasedBrowser extends BaseBrowser {
           method: "GET",
           endpoint: "https://rest.4based.com/api/1.0/base",
           status: baseResp.statusText(),
-          response: await baseResp.json()
+          response: await baseResp.json(),
         });
       this.headers = await baseResp.request().allHeaders();
       return { alias: this.profile.name, id: this.profile._id };
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("login failed", {
         where: "FourBasedBrowser::login",
         error: error.message,
@@ -99,37 +138,42 @@ export class FourBasedBrowser extends BaseBrowser {
 
   public async getFolder(folderName: string) {
     try {
-      const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${this.profile._id}`, {
-        headers: this.headers
-      });
+      const resp = await this.page.request.get(
+        `https://rest.4based.com/api/1.0/user/${this.profile._id}`,
+        {
+          headers: this.headers,
+        },
+      );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::getFolder"
-          })
+            where: "FourBasedBrowser::getFolder",
+          });
         throw new BotError("get folders failed", {
           where: "FourBasedBrowser::getProfile",
           method: "GET",
           endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}`,
           status: resp.statusText(),
           response: await resp.text(),
-          headers: this.headers
+          headers: this.headers,
         });
       }
       const respData = await resp.json();
       const folders = respData.folders || [];
-      if (folders.includes(folderName))
-        return;
+      if (folders.includes(folderName)) return;
       folders.push(folderName);
-      const resp1 = await this.page.request.put(`https://rest.4based.com/api/1.0/user/${this.profile._id}`, {
-        headers: this.headers,
-        data: { folders }
-      });
+      const resp1 = await this.page.request.put(
+        `https://rest.4based.com/api/1.0/user/${this.profile._id}`,
+        {
+          headers: this.headers,
+          data: { folders },
+        },
+      );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::getFolder"
-          })
+            where: "FourBasedBrowser::getFolder",
+          });
         throw new BotError("create folder failed", {
           where: "FourBasedBrowser::getFolder",
           method: "PUT",
@@ -140,8 +184,7 @@ export class FourBasedBrowser extends BaseBrowser {
         });
       }
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("get folder failed", {
         where: "FourBasedBrowser::getFolder",
         error: error.message,
@@ -150,26 +193,32 @@ export class FourBasedBrowser extends BaseBrowser {
     }
   }
 
-  public async findVaultInFolder(folderName: string, vaultId: string): Promise<string | undefined> {
+  public async findVaultInFolder(
+    folderName: string,
+    vaultId: string,
+  ): Promise<string | undefined> {
     try {
       let vault;
       let offset = 0;
       while (true) {
-        const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`, {
-          headers: this.headers,
-          params: {
-            offset: offset,
-            limit: 100,
-            sort: JSON.stringify({ "created_at": "desc" }),
-            with_source: true,
-            belongs_to_folders: folderName,
-          }
-        });
+        const resp = await this.page.request.get(
+          `https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`,
+          {
+            headers: this.headers,
+            params: {
+              offset: offset,
+              limit: 100,
+              sort: JSON.stringify({ created_at: "desc" }),
+              with_source: true,
+              belongs_to_folders: folderName,
+            },
+          },
+        );
         const respData = await resp.json();
         if (!resp.ok()) {
           if (resp.status() == HttpStatusCode.Unauthorized)
             throw new SessionTimeoutError("session timeout", {
-              where: "FourBasedBrowser::findVaultInFolder"
+              where: "FourBasedBrowser::findVaultInFolder",
             });
           throw new BotError("find vault failed", {
             where: "FourBasedBrowser::findVaultInFolder",
@@ -178,27 +227,23 @@ export class FourBasedBrowser extends BaseBrowser {
             params: {
               offset: 0,
               limit: 100,
-              sort: JSON.stringify({ "created_at": "desc" }),
+              sort: JSON.stringify({ created_at: "desc" }),
               with_source: true,
               belongs_to_folders: folderName,
             },
             status: resp.statusText(),
           });
         }
-        if (resp.status() == HttpStatusCode.NoContent)
-          break;
+        if (resp.status() == HttpStatusCode.NoContent) break;
         const vaults: IFourBasedVault[] = respData || [];
-        vault = vaults.find(item => item._id == vaultId);
-        if (vault)
-          break;
-        if (vaults.length < 100)
-          break;
+        vault = vaults.find((item) => item._id == vaultId);
+        if (vault) break;
+        if (vaults.length < 100) break;
         offset += 100;
       }
-      return vault?._id
+      return vault?._id;
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("find vault failed", {
         where: "FourBasedBrowser::findVaultInFolder",
         error: error.message,
@@ -210,44 +255,72 @@ export class FourBasedBrowser extends BaseBrowser {
   public async createVault(mediaPath: string): Promise<string | undefined> {
     try {
       await this.page.goto("https://4based.com/cloud");
-      await this.page.locator("div.own-toolbar > icon-bar > ion-buttons > ion-button.add").first().click();
+      await this.page
+        .locator("div.own-toolbar > icon-bar > ion-buttons > ion-button.add")
+        .first()
+        .click();
 
       // upload media
-      await this.page.locator("ion-modal.modal-upload > modal-upload input#upload").setInputFiles(mediaPath);
+      await this.page
+        .locator("ion-modal.modal-upload > modal-upload input#upload")
+        .setInputFiles(mediaPath);
       // click continue
-      await this.page.locator("ion-modal.modal-upload > modal-upload file-stack-preview").waitFor({ timeout: 300000 });
-      await this.page.locator("ion-modal.modal-upload > modal-upload > ion-footer > ion-toolbar > ion-button").last().click();
+      await this.page
+        .locator("ion-modal.modal-upload > modal-upload file-stack-preview")
+        .waitFor({ timeout: 300000 });
+      try {
+        await this.page.locator("ion-button.consent-banner__button--accept").first().click({ timeout: 5000 });
+      } catch (e) {
+      }
+      await this.page
+        .locator(
+          "ion-modal.modal-upload > modal-upload > ion-footer > ion-toolbar > ion-button",
+        )
+        .last()
+        .click();
 
-      const vaultPromise = this.page.waitForResponse(async (response) => {
-        const urlMatches = response.url().includes("https://storage.4based.com/api/1.0/user");
-        const isPost = response.request().method() === "POST";
-        try {
-          const body = await response.json();
-          // Adjust if completed is nested or differently typed in your API
-          const isCompleted = body?.complete === true;
-          return isCompleted;
-        } catch (e) {
-          // If body isn't JSON or parsing fails, don't resolve yet
-          return false;
-        }
-      }, { timeout: 180000 });
-      await this.page.locator("ion-modal.modal-upload > modal-upload file-stack-edit").waitFor();
-      await this.page.locator("ion-modal.modal-upload > modal-upload > ion-footer > ion-toolbar > ion-button").last().click();
+      const vaultPromise = this.page.waitForResponse(
+        async (response) => {
+          const urlMatches = response
+            .url()
+            .includes("https://storage.4based.com/api/1.0/user");
+          const isPost = response.request().method() === "POST";
+          try {
+            const body = await response.json();
+            // Adjust if completed is nested or differently typed in your API
+            const isCompleted = body?.complete === true;
+            return isCompleted;
+          } catch (e) {
+            // If body isn't JSON or parsing fails, don't resolve yet
+            return false;
+          }
+        },
+        { timeout: 180000 },
+      );
+      await this.page
+        .locator("ion-modal.modal-upload > modal-upload file-stack-edit")
+        .waitFor();
+      await this.page
+        .locator(
+          "ion-modal.modal-upload > modal-upload > ion-footer > ion-toolbar > ion-button",
+        )
+        .last()
+        .click();
       const vaultResp = await vaultPromise;
       const vaultData = await vaultResp.json();
-      if (!vaultResp.ok() || !vaultData.complete) throw new BotError("create vault failed", {
-        where: "FourBasedBrowser::createVault",
-        method: "POST",
-        endpoint: vaultResp.url(),
-        status: vaultResp.statusText(),
-        response: vaultData,
-      });
+      if (!vaultResp.ok() || !vaultData.complete)
+        throw new BotError("create vault failed", {
+          where: "FourBasedBrowser::createVault",
+          method: "POST",
+          endpoint: vaultResp.url(),
+          status: vaultResp.statusText(),
+          response: vaultData,
+        });
       if (vaultData.vault && vaultData.vault.length > 0)
         return vaultData.vault[0]._id;
       return undefined;
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("create vault failed", {
         where: "FourBasedBrowser::createVault",
         error: error.message,
@@ -258,33 +331,34 @@ export class FourBasedBrowser extends BaseBrowser {
 
   public async moveVaultToFolder(vaultId: string, folderName: string) {
     try {
-      const resp = await this.page.request.put(`https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`, {
-        headers: this.headers,
-        data: { belongs_to_folders: [folderName], ids: [vaultId] }
-      });
+      const resp = await this.page.request.put(
+        `https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`,
+        {
+          headers: this.headers,
+          data: { belongs_to_folders: [folderName], ids: [vaultId] },
+        },
+      );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::moveVaultToFolder"
+            where: "FourBasedBrowser::moveVaultToFolder",
           });
         throw new BotError("move vault failed", {
           where: "FourBasedBrowser::moveVaultToFolder",
           method: "PUT",
           endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/vault`,
           status: resp.statusText(),
-          response: await resp.json()
+          response: await resp.json(),
         });
       }
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("move vault failed", {
         where: "FourBasedBrowser::moveVaultToFolder",
         error: error.message,
         stack: error.stack,
       });
     }
-
   }
 
   private UniqueID() {
@@ -292,37 +366,61 @@ export class FourBasedBrowser extends BaseBrowser {
       return Math.random().toString(16).slice(-4);
     }
 
-    return chr4() + chr4() +
-      '-' + chr4() +
-      '-' + chr4() +
-      '-' + chr4() +
-      '-' + chr4() + chr4() + chr4();
-  };
+    return (
+      chr4() +
+      chr4() +
+      "-" +
+      chr4() +
+      "-" +
+      chr4() +
+      "-" +
+      chr4() +
+      "-" +
+      chr4() +
+      chr4() +
+      chr4()
+    );
+  }
 
-  public async schedulePost(scheduledAt: Date, title: string, mediaIds: string[], type?: number, price?: number) {
+  public async schedulePost(
+    scheduledAt: Date,
+    title: string,
+    mediaIds: string[],
+    type?: number,
+    price?: number,
+  ) {
     try {
       const guid = this.UniqueID();
       const params = {
-        "vaults_to_file_stack": {
-          "vaults": mediaIds.map((mediaId, index) => ({ "id": mediaId, "guid": this.UniqueID(), "position": index })),
-          "description": title,
-          "price": (price || 0) * 100,
-          "to_be_posted_at": moment(scheduledAt).utc().format("YYYY-MM-DD HH:mm:ss"),
-          "status": "to_be_posted",
-          "is_subscription_item": false,
-          "additional_categories": ["media"],
-          "guid": guid
-        }
-      }
-      const resp = await this.page.request.post(`https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/`, {
-        headers: this.headers,
-        data: params
-      })
+        vaults_to_file_stack: {
+          vaults: mediaIds.map((mediaId, index) => ({
+            id: mediaId,
+            guid: this.UniqueID(),
+            position: index,
+          })),
+          description: title,
+          price: (price || 0) * 100,
+          to_be_posted_at: moment(scheduledAt)
+            .utc()
+            .format("YYYY-MM-DD HH:mm:ss"),
+          status: "to_be_posted",
+          is_subscription_item: false,
+          additional_categories: ["media"],
+          guid: guid,
+        },
+      };
+      const resp = await this.page.request.post(
+        `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/`,
+        {
+          headers: this.headers,
+          data: params,
+        },
+      );
       const respData = await resp.json();
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::schedulePost"
+            where: "FourBasedBrowser::schedulePost",
           });
         throw new BotError("schedule post failed", {
           where: "FourBasedBrowser::schedulePost",
@@ -330,13 +428,12 @@ export class FourBasedBrowser extends BaseBrowser {
           endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/`,
           params,
           status: resp.statusText(),
-          response: respData
+          response: respData,
         });
       }
       return respData._id;
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("schedule post failed", {
         where: "FourBasedBrowser::schedulePost",
         error: error.message,
@@ -347,13 +444,16 @@ export class FourBasedBrowser extends BaseBrowser {
 
   public async deletePost(postId: string): Promise<void> {
     try {
-      const resp = await this.page.request.delete(`https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/${postId}`, {
-        headers: this.headers
-      });
+      const resp = await this.page.request.delete(
+        `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/${postId}`,
+        {
+          headers: this.headers,
+        },
+      );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::deletePost"
+            where: "FourBasedBrowser::deletePost",
           });
         throw new BotError("delete post failed", {
           where: "FourBasedBrowser::deletePost",
@@ -362,10 +462,8 @@ export class FourBasedBrowser extends BaseBrowser {
           status: resp.statusText(),
         });
       }
-
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("delete post failed", {
         where: "FourBasedBrowser::deletePost",
         error: error.message,
@@ -380,21 +478,24 @@ export class FourBasedBrowser extends BaseBrowser {
       let offset = 0;
       let page = 0;
       while (true) {
-        const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack`, {
-          headers: this.headers,
-          params: {
-            offset,
-            limit: 24,
-            categories: "media",
-            sort: JSON.stringify({ created_at: "desc" }),
-            is_subscription_item: false
-          }
-        });
+        const resp = await this.page.request.get(
+          `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack`,
+          {
+            headers: this.headers,
+            params: {
+              offset,
+              limit: 24,
+              categories: "media",
+              sort: JSON.stringify({ created_at: "desc" }),
+              is_subscription_item: false,
+            },
+          },
+        );
         // const respData = await resp.json();
         if (!resp.ok()) {
           if (resp.status() == HttpStatusCode.Unauthorized)
             throw new SessionTimeoutError("session timeout", {
-              where: "FourBasedBrowser::getSelfPosts"
+              where: "FourBasedBrowser::getSelfPosts",
             });
           throw new BotError("get self posts failed", {
             where: "FourBasedBrowser::getSelfPosts",
@@ -405,28 +506,24 @@ export class FourBasedBrowser extends BaseBrowser {
               limit: 24,
               categories: "media",
               sort: JSON.stringify({ created_at: "desc" }),
-              is_subscription_item: false
+              is_subscription_item: false,
             },
             status: resp.statusText(),
-            response: await resp.text()
+            response: await resp.text(),
           });
         }
-        if (resp.status() == HttpStatusCode.NoContent)
-          break;
+        if (resp.status() == HttpStatusCode.NoContent) break;
         const respData = await resp.json();
         const posts: IFourBasedPost[] = respData || [];
-        postIds.push(...posts.map(post => post._id));
-        if (posts.length < 24)
-          break;
+        postIds.push(...posts.map((post) => post._id));
+        if (posts.length < 24) break;
         page += 1;
-        if (page > 5)
-          break;
+        if (page > 5) break;
         offset += 24;
       }
       return postIds;
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("get posts failed", {
         where: "FourBasedBrowser::getSelfPosts",
         error: error.message,
@@ -437,14 +534,22 @@ export class FourBasedBrowser extends BaseBrowser {
 
   public async getFollowers(userId: string): Promise<IFourBasedUser[]> {
     try {
-      const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${this.profile._id}/follower`, {
-        headers: this.headers,
-        params: { offset: 0, limit: 40, search: "", sort: "%7B%22created_at%22%3A%22desc%22%7D" }
-      });
+      const resp = await this.page.request.get(
+        `https://rest.4based.com/api/1.0/user/${this.profile._id}/follower`,
+        {
+          headers: this.headers,
+          params: {
+            offset: 0,
+            limit: 40,
+            search: "",
+            sort: "%7B%22created_at%22%3A%22desc%22%7D",
+          },
+        },
+      );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::getFollowers"
+            where: "FourBasedBrowser::getFollowers",
           });
         throw new BotError("get followers failed", {
           where: "FourBasedBrowser::getFollowers",
@@ -455,15 +560,14 @@ export class FourBasedBrowser extends BaseBrowser {
         });
       }
       const respData: IFourBasedUser[] = await resp.json();
-      return respData.filter(user => !user.creator);
+      return respData.filter((user) => !user.creator);
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("get followers failed", {
         where: "FourBasedBrowser::getFollowers",
         error: error.message,
         stack: error.stack,
-      })
+      });
     }
   }
 
@@ -474,7 +578,7 @@ export class FourBasedBrowser extends BaseBrowser {
       const params = {
         statistic_type: "all",
         limit: 40,
-        sort: JSON.stringify({ "created_at": "desc" }),
+        sort: JSON.stringify({ created_at: "desc" }),
         offset: 0,
         bookingdate_from: from.format("YYYY-MM-DD HH:mm:ss"),
         bookingdate_to: to.format("YYYY-MM-DD HH:mm:ss"),
@@ -482,15 +586,18 @@ export class FourBasedBrowser extends BaseBrowser {
         with_invoice: true,
         with_buyer: true,
         with_file_stack: true,
-      }
-      const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${this.profile._id}/process/sum/netto`, {
-        headers: this.headers,
-        params
-      });
+      };
+      const resp = await this.page.request.get(
+        `https://rest.4based.com/api/1.0/user/${this.profile._id}/process/sum/netto`,
+        {
+          headers: this.headers,
+          params,
+        },
+      );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::getMonthlyEarnings"
+            where: "FourBasedBrowser::getMonthlyEarnings",
           });
         throw new BotError("get earnings failed", {
           where: "FourBasedBrowser::getMonthlyEarnings",
@@ -498,19 +605,18 @@ export class FourBasedBrowser extends BaseBrowser {
           endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/process/sum/netto`,
           params,
           status: resp.statusText(),
-          response: await resp.text()
-        })
+          response: await resp.text(),
+        });
       }
       const respData = await resp.text();
       return parseFloat(respData || "0");
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("get earnings failed", {
         where: "FourBasedBrowser::getMonthlyEarnings",
         error: error.message,
-        stack: error.stack
-      })
+        stack: error.stack,
+      });
     }
   }
 
@@ -520,17 +626,18 @@ export class FourBasedBrowser extends BaseBrowser {
         offset: 0,
         limit: 40,
         search: "a",
-        sort: JSON.stringify({ "follower_count": "desc" }),
+        sort: JSON.stringify({ follower_count: "desc" }),
         verified: true,
-        role: role
-      }
+        role: role,
+      };
       const resp = await this.page.request.get(
         `https://rest.4based.com/api/1.0/user`,
-        { headers: this.headers, params });
+        { headers: this.headers, params },
+      );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::getUnreadChats"
+            where: "FourBasedBrowser::getUnreadChats",
           });
         throw new BotError("get users failed", {
           where: "FourBasedBrowser::getUsers",
@@ -546,13 +653,12 @@ export class FourBasedBrowser extends BaseBrowser {
 
       return users;
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("get users failed", {
         where: "FourBasedBrowser::getUsers",
         error: error.message,
-        stack: error.stack
-      })
+        stack: error.stack,
+      });
     }
   }
 
@@ -565,16 +671,17 @@ export class FourBasedBrowser extends BaseBrowser {
         without_empty_chats: true,
         limit: 30,
         offset: 0,
-        sort: JSON.stringify({ "chat_updated_at": "desc" }),
-        list_names: "unread"
-      }
+        sort: JSON.stringify({ chat_updated_at: "desc" }),
+        list_names: "unread",
+      };
       const resp = await this.page.request.get(
         `https://rest.4based.com/api/1.0/user/${this.profile._id}/chatsByList`,
-        { headers: this.headers, params });
+        { headers: this.headers, params },
+      );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FourBasedBrowser::getUnreadChats"
+            where: "FourBasedBrowser::getUnreadChats",
           });
         throw new BotError("get chats failed", {
           where: "FourBasedBrowser::getUnreadChats",
@@ -587,25 +694,36 @@ export class FourBasedBrowser extends BaseBrowser {
       }
       const respData = await resp.json();
       const chats: IFourBasedChat[] = respData || [];
-      const messages: IChatMessage[] = chats.map(chat => {
-        const user = chat.users.find(item => item._id == chat.last_message.user_id);
-        return ({ user: user?.name || "", message: chat.last_message.message, time: moment.utc(chat.last_message.created_at, 'YYYY-MM-DD HH:mm:ss').toDate() })
-      }).filter(chat => chat.user != "4based")
+      const messages: IChatMessage[] = chats
+        .map((chat) => {
+          const user = chat.users.find(
+            (item) => item._id == chat.last_message.user_id,
+          );
+          return {
+            user: user?.name || "",
+            message: chat.last_message.message,
+            time: moment
+              .utc(chat.last_message.created_at, "YYYY-MM-DD HH:mm:ss")
+              .toDate(),
+          };
+        })
+        .filter((chat) => chat.user != "4based");
       return messages;
     } catch (error: any) {
-      if (error instanceof BotError)
-        throw error;
+      if (error instanceof BotError) throw error;
       throw new BotError("get chats failed", {
         where: "FourBasedBrowser::getUnreadChats",
         error: error.message,
-        stack: error.stack
-      })
+        stack: error.stack,
+      });
     }
   }
 
   public async refreshSession(): Promise<void> {
     try {
-      const profilePromise = this.page.waitForRequest(`https://rest.4based.com/api/1.0/user/name/${this.profile.name}`);
+      const profilePromise = this.page.waitForRequest(
+        `https://rest.4based.com/api/1.0/user/name/${this.profile.name}`,
+      );
       await this.page.goto(`https://4based.com/profile/${this.profile.name}`);
       const profileReq = await profilePromise;
       this.headers = await profileReq.allHeaders();
@@ -614,7 +732,7 @@ export class FourBasedBrowser extends BaseBrowser {
         where: "FourBasedBrowser::refreshSession",
         error: error.message,
         stack: error.stack,
-      })
+      });
     }
   }
 }

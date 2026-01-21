@@ -53,14 +53,14 @@ export class MaloumBrowser extends BaseBrowser {
             body: body,
             headers: response.headers(),
           });
-        }
+        },
       );
       this.page.on("console", async (msg) => {
         if (msg.text().includes("intercepted-params:")) {
           this.logger.info("solving captcha...");
           this.captchaSolved = false;
           const params = JSON.parse(
-            msg.text().replace("intercepted-params:", "")
+            msg.text().replace("intercepted-params:", ""),
           );
           const res = await this.solver.cloudflareTurnstile({
             pageurl: params.pageurl,
@@ -105,7 +105,7 @@ export class MaloumBrowser extends BaseBrowser {
     try {
       const mePromise = this.page.waitForResponse(
         "https://api.maloum.com/users/current",
-        { timeout: 120000 }
+        { timeout: 120000 },
       );
       await this.page.goto("https://app.maloum.com/", { timeout: 600000 });
       const meResp = await mePromise;
@@ -129,14 +129,14 @@ export class MaloumBrowser extends BaseBrowser {
     // filter google analytics
     await this.context.route(
       /https:\/\/www\.google-analytics\.com\/.*/,
-      (route) => route.abort()
+      (route) => route.abort(),
     );
     // set token filter
     this.page.on("response", async (response) => {
       const url = response.url();
       if (
         url.includes(
-          "https://srswgacczfgjttwdpuia.supabase.co/auth/v1/token"
+          "https://srswgacczfgjttwdpuia.supabase.co/auth/v1/token",
         ) &&
         response.request().method() == "POST" &&
         response.status() == 200
@@ -149,7 +149,7 @@ export class MaloumBrowser extends BaseBrowser {
   }
 
   public async login(
-    setting: IAccountSettings
+    setting: IAccountSettings,
   ): Promise<IAccountID | undefined> {
     try {
       // await this.page.waitForTimeout(60000);
@@ -175,7 +175,7 @@ export class MaloumBrowser extends BaseBrowser {
       //   return response.url() === "https://api.maloum.com/users/me" && response.request().method() === "GET"
       // }, { timeout: 30000 });
       const loginPromise = this.page.waitForResponse(
-        "https://api.maloum.com/user-management/login"
+        "https://api.maloum.com/user-management/login",
       );
 
       // click sign-in button
@@ -195,7 +195,7 @@ export class MaloumBrowser extends BaseBrowser {
         });
       // prepare wait login response
       const mePromise = this.page.waitForResponse(
-        "https://api.maloum.com/users/current"
+        "https://api.maloum.com/users/current",
       );
       // // click sign-in button
       // await this.page.locator("form input[type='submit']").first().click();
@@ -242,7 +242,7 @@ export class MaloumBrowser extends BaseBrowser {
         {
           headers: this.headers,
           params: { limit: 15 },
-        }
+        },
       );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
@@ -260,12 +260,12 @@ export class MaloumBrowser extends BaseBrowser {
       const respData = await resp.json();
       const folders: IMaloumFolder[] = respData.data || [];
       folder = folders.find(
-        (item) => item.name.toLowerCase() == folderName.toLowerCase()
+        (item) => item.name.toLowerCase() == folderName.toLowerCase(),
       );
       if (folder) return folder;
       const resp1 = await this.page.request.post(
         "https://api.maloum.com/vault/folders",
-        { headers: this.headers, data: { name: folderName } }
+        { headers: this.headers, data: { name: folderName } },
       );
       if (!resp1.ok()) {
         if (resp1.status() == HttpStatusCode.Unauthorized)
@@ -299,7 +299,7 @@ export class MaloumBrowser extends BaseBrowser {
         {
           headers: this.headers,
           params: { deleteMedia: false },
-        }
+        },
       );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
@@ -335,7 +335,7 @@ export class MaloumBrowser extends BaseBrowser {
         {
           headers: this.headers,
           params: { limit: 30 },
-        }
+        },
       );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
@@ -362,7 +362,7 @@ export class MaloumBrowser extends BaseBrowser {
           {
             headers: this.headers,
             params: { next, limit: 30 },
-          }
+          },
         );
         if (!respNext.ok()) {
           if (respNext.status() == HttpStatusCode.Unauthorized)
@@ -402,7 +402,7 @@ export class MaloumBrowser extends BaseBrowser {
         {
           headers: this.headers,
           params: { next: page * 30, limit: 30 },
-        }
+        },
       );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
@@ -432,7 +432,7 @@ export class MaloumBrowser extends BaseBrowser {
 
   public async findMediaInFolder(
     folder: IMaloumFolder,
-    mediaId: string
+    mediaId: string,
   ): Promise<string | undefined> {
     try {
       const resp = await this.page.request.get(
@@ -440,7 +440,7 @@ export class MaloumBrowser extends BaseBrowser {
         {
           headers: this.headers,
           params: { limit: 50 },
-        }
+        },
       );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
@@ -473,7 +473,7 @@ export class MaloumBrowser extends BaseBrowser {
     try {
       const resp = await this.page.request.delete(
         `https://api.maloum.com/posts/${postId}`,
-        { headers: this.headers }
+        { headers: this.headers },
       );
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
@@ -504,7 +504,7 @@ export class MaloumBrowser extends BaseBrowser {
         `https://api.maloum.com/posts/${postId}/like`,
         {
           headers: this.headers,
-        }
+        },
       );
       if (!resp.ok()) {
         if (resp.status() == 401)
@@ -537,7 +537,7 @@ export class MaloumBrowser extends BaseBrowser {
         {
           headers: this.headers,
           data: { text },
-        }
+        },
       );
       if (!resp.ok()) {
         if (resp.status() == 401)
@@ -606,7 +606,7 @@ export class MaloumBrowser extends BaseBrowser {
   public async getMonthlyEarnings(): Promise<number> {
     try {
       const balancePromise = this.page.waitForResponse(
-        "https://api.maloum.com/users/balance"
+        "https://api.maloum.com/users/balance",
       );
 
       await this.page.goto("https://app.maloum.com/payout", {
@@ -643,7 +643,7 @@ export class MaloumBrowser extends BaseBrowser {
     title: string,
     tags: string[],
     mediaIds: string[],
-    type?: number
+    type?: number,
   ): Promise<void> {
     try {
       let free = true;
@@ -702,7 +702,7 @@ export class MaloumBrowser extends BaseBrowser {
         });
       });
       const respPromise = this.page.waitForResponse(
-        "https://api.maloum.com/posts"
+        "https://api.maloum.com/posts",
       );
       // click publish button
       await this.page
@@ -714,7 +714,7 @@ export class MaloumBrowser extends BaseBrowser {
         throw new BotError("schedule post failed", {
           where: "MaloumBrowser::schedulePost",
           method: "POST",
-endpoint: "https://api.maloum.com/posts",
+          endpoint: "https://api.maloum.com/posts",
           status: resp.statusText(),
           response: await resp.text(),
         });
@@ -733,7 +733,7 @@ endpoint: "https://api.maloum.com/posts",
     title: string,
     tags: string[],
     mediaId: string,
-    type?: number
+    type?: number,
   ): Promise<string> {
     try {
       let free = true;
@@ -789,7 +789,7 @@ endpoint: "https://api.maloum.com/posts",
         });
       });
       const respPromise = this.page.waitForResponse(
-        "https://api.maloum.com/posts"
+        "https://api.maloum.com/posts",
       );
       // click publish button
       await this.page
@@ -797,10 +797,9 @@ endpoint: "https://api.maloum.com/posts",
         .first()
         .click();
       const resp = await respPromise;
-      const respData = await resp.json();
       if (!resp.ok()) {
-        if (respData.statusCode == 429) 
-          return POST_LIMITED;
+        const respData = await resp.json();
+        if (respData.statusCode == 429) return POST_LIMITED;
         throw new BotError("publish post failed", {
           where: "MaloumBrowser::publishPost",
           method: "POST",
@@ -822,7 +821,7 @@ endpoint: "https://api.maloum.com/posts",
 
   public async uploadMediaInFolder(
     folder: string,
-    image: string
+    image: string,
   ): Promise<string> {
     try {
       // go to vault page
@@ -900,9 +899,13 @@ endpoint: "https://api.maloum.com/posts",
             response.request().method() === "POST"
           );
         },
-        { timeout: 600000 }
+        { timeout: 600000 },
       );
-      const completePromise = this.page.waitForResponse(response => response.url().includes("https://api.maloum.com/vault/folders/"), { timeout: 600000 });
+      const completePromise = this.page.waitForResponse(
+        (response) =>
+          response.url().includes("https://api.maloum.com/vault/folders/"),
+        { timeout: 600000 },
+      );
       // upload image
       await this.page
         .locator("div#rightColumn input[type='file']")
