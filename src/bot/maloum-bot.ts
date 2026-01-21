@@ -52,16 +52,10 @@ export class MaloumBot extends PostBot {
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
-      const postRemains = this.settings.params?.postRemains || [];
-      const postIds: string[] = await this.browser.getSelfPosts();
-      const postsPublished = postIds.filter((postId) =>
-        postRemains.includes(postId),
-      );
-      this.logger.info(
-        `submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`,
-      );
-      while (postsPublished.length > postCount) {
-        const postDeleting = postsPublished.pop();
+      const postIds: string[] = await this.browser.getSelfFreePosts();
+      this.logger.info(`published posts: ${postIds.length}`);
+      while (postIds.length > postCount) {
+        const postDeleting = postIds.pop();
         if (postDeleting) {
           await this.browser.deletePost(postDeleting);
           deleteIds.push(postDeleting);
@@ -119,13 +113,11 @@ export class MaloumBot extends PostBot {
     try {
       // await this.browser.refreshSession();
 
-      /// need update
-      // deleteIds = await this.deleteOldPosts();
-      // if (deleteIds.length > 0) {
-      //   await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
-      // }
-      /// need update
-
+      deleteIds = await this.deleteOldPosts();
+      if (deleteIds.length > 0) {
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
+      }
+      
       let folderName = content.folder;
       let mediaId = await this.getMedia(folderName, media);
       if (mediaId != media.uuid) {
@@ -407,23 +399,22 @@ export class MaloumBot extends PostBot {
   }
 
   protected needTest(): boolean {
+    if (this.tested) return false;
+    this.tested = true;
+    return true;
+  }
+
+  protected needPost(): boolean {
+    return false;
+  }
+
+  protected needSchedule(): boolean {
     return false;
   }
 
   protected async doTest(): Promise<boolean> {
     try {
-      this.tested = true;
-      const content = this.settings.params?.contents[0];
-      if (!content) {
-        this.logger.info("no free contents");
-        return true;
-      }
-      const image = await this.downloadFile(content.media[0].name);
-      const mediaId = await this.browser.uploadMediaInFolder(
-        content.folder,
-        image,
-      );
-      this.logger.info(`media Id: ${mediaId}`);
+      await this.deleteOldPosts();
       return true;
     } catch (error) {
       console.error(error);

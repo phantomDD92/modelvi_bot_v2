@@ -18,6 +18,7 @@ import {
   IMaloumFolder,
   IMaloumMediaInfo,
   IMaloumPost,
+  IMaloumProfile,
 } from "../types/maloum";
 import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
@@ -33,6 +34,7 @@ interface IMaloumTokenResponse {
 
 export class MaloumBrowser extends BaseBrowser {
   protected captchaSolved: boolean;
+  protected profile!: IMaloumProfile;
 
   // constructor
   constructor(config: IBotConfig, logger: Logger) {
@@ -211,10 +213,10 @@ export class MaloumBrowser extends BaseBrowser {
         });
       }
       this.logger.info("get user profile");
-
       this.headers = await meResp.request().allHeaders();
       const meData = await meResp.json();
-      if (!meData.isCreator)
+      this.profile = meData;
+      if (!this.profile.isCreator)
         throw new AuthError("not creator account", {
           where: "MaloumBrowser::login",
           method: "GET",
@@ -327,64 +329,92 @@ export class MaloumBrowser extends BaseBrowser {
 
   public async getSelfPosts(): Promise<string[]> {
     try {
-      const postIds: string[] = [];
-      let next;
-      let page = 0;
-      const resp = await this.page.request.get(
-        "https://api.maloum.com/posts/me",
-        {
-          headers: this.headers,
-          params: { limit: 30 },
+      // install get posts hook
+      await this.page.route(
+        /https:\/\/api\.maloum\.com\/posts\/me\?.*/,
+        async (route) => {
+          await this.page.unroute(/https:\/\/api\.maloum\.com\/posts\/me\?.*/);
+          await route.continue({
+            url: "https://api.maloum.com/posts/me?limit=30",
+          });
         },
       );
-      if (!resp.ok()) {
-        if (resp.status() == HttpStatusCode.Unauthorized)
-          throw new SessionTimeoutError("session timeout", {
-            where: "MaloumBrowser::getSelfPosts",
-          });
-        throw new BotError("get self posts failed", {
-          where: "MaloumBrowser::getSelfPosts",
+      const mePromise = this.page.waitForResponse(
+        /https:\/\/api\.maloum\.com\/posts\/me\?.*/,
+      );
+      // go to account page
+      await this.page.goto(
+        `https://app.maloum.com/creator/${this.profile.username}`,
+        { waitUntil: "domcontentloaded" },
+      );
+      const meResp = await mePromise;
+      if (!meResp.ok())
+        throw new BotError("get posts failed", {
+          where: "MaloumBrowser::getPosts",
           method: "GET",
-          endpoint: "https://api.maloum.com/posts/me",
-          params: { limit: 30 },
-          status: resp.statusText(),
-          response: await resp.text(),
+          endpoint: meResp.request().url(),
+          status: meResp.statusText(),
+          response: await meResp.text(),
         });
-      }
-      const respData = await resp.json();
-      next = respData.next;
-      let posts: IMaloumPost[] = respData.data || [];
-      postIds.push(...posts.map((post) => post._id));
-      while (next) {
-        page += 1;
-        const respNext = await this.page.request.get(
-          "https://api.maloum.com/posts/me",
-          {
-            headers: this.headers,
-            params: { next, limit: 30 },
-          },
-        );
-        if (!respNext.ok()) {
-          if (respNext.status() == HttpStatusCode.Unauthorized)
-            throw new SessionTimeoutError("session timeout", {
-              where: "MaloumBrowser::getSelfPosts",
-            });
-          throw new BotError("get self posts failed", {
-            where: "MaloumBrowser::getSelfPosts",
-            method: "GET",
-            endpoint: "https://api.maloum.com/posts/me",
-            params: { next, limit: 30 },
-            status: resp.statusText(),
-            response: await resp.text(),
+      const meData = await meResp.json();
+      const posts: IMaloumPost[] = meData.data || [];
+      return posts
+        .filter(
+          (post) =>
+            moment().isAfter(post.publishedAt) &&
+            post.categories.findIndex((cat) => cat.name == "public") >= 0 &&
+            post.public,
+        )
+        .map((post) => post._id);
+    } catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("get posts failed", {
+        where: "MaloumBrowser::getSelfPosts",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async getSelfFreePosts(): Promise<string[]> {
+    try {
+      // install get posts hook
+      await this.page.route(
+        /https:\/\/api\.maloum\.com\/posts\/me\?.*/,
+        async (route) => {
+          await this.page.unroute(/https:\/\/api\.maloum\.com\/posts\/me\?.*/);
+          await route.continue({
+            url: "https://api.maloum.com/posts/me?limit=30",
           });
-        }
-        const respNextData = await respNext.json();
-        next = respNextData.next;
-        posts = respData.data || [];
-        postIds.push(...posts.map((post) => post._id));
-        if (page > 5) break;
-      }
-      return postIds;
+        },
+      );
+      const mePromise = this.page.waitForResponse(
+        /https:\/\/api\.maloum\.com\/posts\/me\?.*/,
+      );
+      // go to account page
+      await this.page.goto(
+        `https://app.maloum.com/creator/${this.profile.username}`,
+        { waitUntil: "domcontentloaded" },
+      );
+      const meResp = await mePromise;
+      if (!meResp.ok())
+        throw new BotError("get posts failed", {
+          where: "MaloumBrowser::getPosts",
+          method: "GET",
+          endpoint: meResp.request().url(),
+          status: meResp.statusText(),
+          response: await meResp.text(),
+        });
+      const meData = await meResp.json();
+      const posts: IMaloumPost[] = meData.data || [];
+      return posts
+        .filter(
+          (post) =>
+            moment().isAfter(post.publishedAt) &&
+            post.categories.findIndex((cat) => cat.name == "public") >= 0 &&
+            post.public,
+        )
+        .map((post) => post._id);
     } catch (error: any) {
       if (error instanceof BotError) throw error;
       throw new BotError("get posts failed", {
@@ -471,23 +501,40 @@ export class MaloumBrowser extends BaseBrowser {
 
   public async deletePost(postId: string): Promise<void> {
     try {
-      const resp = await this.page.request.delete(
-        `https://api.maloum.com/posts/${postId}`,
-        { headers: this.headers },
-      );
-      if (!resp.ok()) {
-        if (resp.status() == HttpStatusCode.Unauthorized)
-          throw new SessionTimeoutError("session timeout", {
-            where: "MaloumBrowser::deletePost",
+      // install get posts hook
+      await this.page.route(
+        /https:\/\/api\.maloum\.com\/posts\/[0-9a-fA-F]{24}/,
+        async (route) => {
+          await this.page.unroute(
+            /https:\/\/api\.maloum\.com\/posts\[0-9a-fA-F]{24}/,
+          );
+          await route.continue({
+            url: `https://api.maloum.com/posts/${postId}`,
           });
+        },
+      );
+      const deletePromise = this.page.waitForResponse(
+        /https:\/\/api\.maloum\.com\/posts\/[0-9a-fA-F]{24}/,
+      );
+      // click first post delete button
+      await this.page
+        .locator("button[data-testid='modify-item']")
+        .first()
+        .click();
+      await this.page.locator("div[data-testid='delete-post']").first().click();
+      await this.page
+        .locator("div[data-testid='confirm-delete-post']")
+        .first()
+        .click();
+      const deleteResp = await deletePromise;
+      if (!deleteResp.ok())
         throw new BotError("delete post failed", {
           where: "MaloumBrowser::deletePost",
-          method: "DELETE",
-          endpoint: `https://api.maloum.com/posts/${postId}`,
-          status: resp.statusText(),
-          response: await resp.text(),
+          method: "GET",
+          endpoint: deleteResp.request().url(),
+          status: deleteResp.statusText(),
+          response: await deleteResp.text(),
         });
-      }
     } catch (error: any) {
       if (error instanceof BotError) throw error;
       throw new BotError("delete post failed", {
