@@ -88,6 +88,13 @@ export class FourBasedBrowser extends BaseBrowser {
         });
       const loginData = await loginResp.json();
       this.profile = loginData.user;
+      let isCreator = false;
+      for (var role of this.profile.roles) {
+        if (role.name == "creator")
+          isCreator = true;
+      }
+      if (!isCreator)
+        throw new AuthError("not creator account");
       const baseResp = await basePromise;
       if (!baseResp.ok())
         throw new BotError("login failed", {
