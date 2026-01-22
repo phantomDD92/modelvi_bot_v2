@@ -45,8 +45,8 @@ export class KnkyBrowser extends BaseBrowser {
 
   public async afterHome(): Promise<void> {
     try {
-      await this.page.locator("div#ageWarningModal").waitFor();
-      await this.page.locator("div#ageWarningModal button#age-wraning-close-button").click();
+      await this.page.locator("div#ageWarningModal").waitFor({timeout: 3000});
+      await this.page.locator("div#ageWarningModal button#age-wraning-close-button").click({timeout: 1000});
       this.logger.info("close age warning dialog");
     } catch (error: any) {
 
@@ -75,8 +75,8 @@ export class KnkyBrowser extends BaseBrowser {
       await this.page.locator("div#SignInModal button", { hasText: "Sign In" }).click();
       // await this.page.goto(setting.device);
       const authResp = await authPromise;
-      const authPayload = await authResp.json()
-      const authData = this.parsePayload(authPayload.r)
+      const authData = await authResp.json()
+      // const authData = this.parsePayload(authPayload.r)
       if (!authResp.ok()) {
         const message = authData.message;
         if (message.includes("Incorrect"))
@@ -107,8 +107,8 @@ export class KnkyBrowser extends BaseBrowser {
           });
           await this.page.locator("div#otpVerificationModal button", { hasText: "Verify" }).click();
           const authResp1 = await authPromise1;
-          const authPayload1 = await authResp1.json();
-          const authData1 = this.parsePayload(authPayload1.r)
+          const authData1 = await authResp1.json();
+          // const authData1 = this.parsePayload(authPayload1.r)
           if (!authResp1.ok())
             throw new AuthError("invalid security key", {
               where: "KnkyBrowser::login",
@@ -138,8 +138,8 @@ export class KnkyBrowser extends BaseBrowser {
         });
         await this.page.locator("div#otpVerificationModal button", { hasText: "Verify" }).click();
         const authResp1 = await authPromise1;
-        const authPayload1 = await authResp1.json();
-        const authData1 = this.parsePayload(authPayload1.r)
+        const authData1 = await authResp1.json();
+        // const authData1 = this.parsePayload(authPayload1.r)
         if (!authResp1.ok())
           throw new AuthError("invalid security key", {
             where: "KnkyBrowser::login",
@@ -164,8 +164,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await profileResp.text(),
         });
       }
-      const profilePayload = await profileResp.json();
-      const profileData = this.parsePayload(profilePayload.r);
+      const profileData = await profileResp.json();
+      // const profileData = this.parsePayload(profilePayload.r);
       this.profile = profileData.data[0]
       this.headers = await profileResp.request().allHeaders();
       return { alias: this.profile.username, id: this.profile._id }
@@ -199,8 +199,8 @@ export class KnkyBrowser extends BaseBrowser {
             response: await resp.text(),
           });
       }
-      const respPayload = await resp.json();
-      const respData = this.parsePayload(respPayload.r);
+      const respData = await resp.json();
+      // const respData = this.parsePayload(respPayload.r);
       if (respData.status != 200) {
         throw new BotError("get folders failed", {
           where: "KnkyBrowser::getFolders",
@@ -250,8 +250,8 @@ export class KnkyBrowser extends BaseBrowser {
             response: await resp.text(),
           });
       }
-      const respPayload = await resp.json();
-      const respData = this.parsePayload(respPayload.r)
+      const respData = await resp.json();
+      // const respData = this.parsePayload(respPayload.r)
       if (respData.status != 201) {
         throw new BotError("create folder failed", {
           where: "KnkyBrowser::createFolder",
@@ -347,8 +347,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await resp.text(),
         });
       }
-      const respPayload = await resp.json();
-      const respData = this.parsePayload(respPayload.r)
+      const respData = await resp.json();
+      // const respData = this.parsePayload(respPayload.r)
       return respData.data;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -381,8 +381,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await resp.text(),
         });
       }
-      const respPayload = await resp.json();
-      const respData = this.parsePayload(respPayload.r);
+      const respData = await resp.json();
+      // const respData = this.parsePayload(respPayload.r);
       return respData.data;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -499,8 +499,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await createResp.text(),
         });
       }
-      const createPayload = await createResp.json();
-      const createData = this.parsePayload(createPayload.r);
+      const createData = await createResp.json();
+      // const createData = this.parsePayload(createPayload.r);
       return createData.data.post_id;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -550,8 +550,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await createResp.text(),
         });
       }
-      const createPayload = await createResp.json();
-      const createData = this.parsePayload(createPayload.r);
+      const createData = await createResp.json();
+      // const createData = this.parsePayload(createPayload.r);
       return createData.data.post_id;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -638,8 +638,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await createResp.text(),
         });
       }
-      const createPayload = await createResp.json();
-      const createData = this.parsePayload(createPayload.r);
+      const createData = await createResp.json();
+      // const createData = this.parsePayload(createPayload.r);
       return createData.data?.story_id;
     } catch (error: any) {
       if (error instanceof BotError)
@@ -672,8 +672,8 @@ export class KnkyBrowser extends BaseBrowser {
             response: await resp.text()
           });
       }
-      const respPayload = await resp.json();
-      const respData = this.parsePayload(respPayload.r);
+      const respData = await resp.json();
+      // const respData = this.parsePayload(respPayload.r);
       const stories: IKnkyStoryData[] = respData.data || [];
       const storyData = stories.find(item => item._id == this.profile._id)
       return (storyData?.story_data || []).filter(story => story.visibility == "Public");
@@ -697,8 +697,8 @@ export class KnkyBrowser extends BaseBrowser {
         `https://backend.knky.co/v1/users/monetisation/overview?fromDate=${fromDate}&toDate=${toDate}`,
         { headers: this.headers }
       );
-      const respPayload = await response.json();
-      const respData = this.parsePayload(respPayload.r)
+      const respData = await response.json();
+      // const respData = this.parsePayload(respPayload.r)
       if (!response.ok() || respData.status != 200) {
         throw new BotError("get monthly analysis failed", {
           where: "KnkyBrowser::getMonthlyAnalysis",

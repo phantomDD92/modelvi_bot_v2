@@ -72,17 +72,6 @@ export class MaloumBot extends PostBot {
   }
 
   private async getMedia(folderName: string, media: IMedia): Promise<string> {
-    // const folder = await this.browser.getFolder(folderName);
-    // let mediaId = media?.uuid;
-    // if (mediaId)
-    //   mediaId = await this.browser.findMediaInFolder(folder, mediaId);
-    // if (!mediaId) {
-    //   const image = await this.downloadFile(media.name);
-    //   this.logger.info(`download media(${media.name})`);
-    //   mediaId = await this.browser.uploadMediaInFolder(folder, image);
-    // }
-    // if (!mediaId) throw new BotError("get media failed");
-    // return mediaId;
     const image = await this.downloadFile(media.name);
     this.logger.info(`download media(${media.name})`);
     let mediaId = await this.browser.uploadMediaInFolder(folderName, image);
@@ -115,9 +104,14 @@ export class MaloumBot extends PostBot {
 
       deleteIds = await this.deleteOldPosts();
       if (deleteIds.length > 0) {
-        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds });
+        await this.service.createLog({
+          success: true,
+          action: ActionType.POST,
+          message: `delete ${deleteIds.length} posts`,
+          targets: deleteIds,
+        });
       }
-      
+
       let folderName = content.folder;
       let mediaId = await this.getMedia(folderName, media);
       if (mediaId != media.uuid) {
