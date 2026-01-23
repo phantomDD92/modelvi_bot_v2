@@ -38,7 +38,7 @@ export class KnkyBrowser extends BaseBrowser {
   // set content filter
   protected async setFilter() {
     // filter images
-    // await this.context.route(/(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/, route => route.abort())
+    await this.context.route(/(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/, route => route.request().method() == "GET" ? route.abort() : route.continue())
     // filter google analytics
     await this.context.route(
       /https:\/\/www\.google-analytics\.com\/.*/,
@@ -53,7 +53,7 @@ export class KnkyBrowser extends BaseBrowser {
         timeout: 100000,
       });
       return;
-    } catch (error: any) {}
+    } catch (error: any) { }
     try {
       await this.page.goto("https://knky.co/", {
         waitUntil: "domcontentloaded",
@@ -76,7 +76,7 @@ export class KnkyBrowser extends BaseBrowser {
         .locator("div#ageWarningModal button#age-wraning-close-button")
         .click({ timeout: 1000 });
       this.logger.info("close age warning dialog");
-    } catch (error: any) {}
+    } catch (error: any) { }
   }
 
   private parsePayload(payload: string) {
@@ -92,6 +92,7 @@ export class KnkyBrowser extends BaseBrowser {
     setting: IAccountSettings,
   ): Promise<IAccountID | undefined> {
     try {
+      await this.wait(5000);
       await this.page.locator("header button", { hasText: "Sign In" }).click();
       await this.page.locator("div#SignInModal").waitFor();
 
@@ -101,7 +102,7 @@ export class KnkyBrowser extends BaseBrowser {
       await this.page
         .locator("div#SignInModal input[name='password']")
         .fill(setting.password);
-
+      await this.wait(5000);
       // if (!setting?.device)
       //   throw new BotError("no magic link");
       const authPromise = this.page.waitForResponse((response) => {
@@ -139,7 +140,7 @@ export class KnkyBrowser extends BaseBrowser {
           });
         if (message.includes("2FA")) {
           if (!setting.device) throw new AuthError("no security key");
-          await this.wait(10000);
+          await this.wait(3000);
           const code = await this.generate2FACode(setting.device);
           await this.page
             .locator("div#otpVerificationModal input")
@@ -166,9 +167,6 @@ export class KnkyBrowser extends BaseBrowser {
               status: authResp1.statusText(),
               response: authData1,
             });
-        } else if (authData.statusCode == 429) {
-          await this.wait(60000);
-          throw new BotError("too many request");
         } else {
           throw new BotError("login failed", {
             where: "KnkyBrowser::login",
@@ -181,7 +179,7 @@ export class KnkyBrowser extends BaseBrowser {
         }
       } else if (authData.data?.otp_required) {
         if (!setting.device) throw new AuthError("no security key");
-        await this.wait(10000);
+        await this.wait(3000);
         const code = await this.generate2FACode(setting.device);
         await this.page
           .locator("div#otpVerificationModal input")
@@ -190,7 +188,7 @@ export class KnkyBrowser extends BaseBrowser {
         const authPromise1 = this.page.waitForResponse((response) => {
           return (
             response.url() ===
-              "https://backend.knky.co/v1/users/verify-login-otp" &&
+            "https://backend.knky.co/v1/users/verify-login-otp" &&
             response.request().method() === "POST"
           );
         });
@@ -200,11 +198,7 @@ export class KnkyBrowser extends BaseBrowser {
         const authResp1 = await authPromise1;
         const authData1 = await authResp1.json();
         // const authData1 = this.parsePayload(authPayload1.r)
-        if (!authResp1.ok()) {
-          if (authData1.statusCode == 429) {
-            await this.wait(60000);
-            throw new BotError("too many request");
-          }
+        if (!authResp1.ok())
           throw new AuthError("invalid security key", {
             where: "KnkyBrowser::login",
             method: "POST",
@@ -213,7 +207,6 @@ export class KnkyBrowser extends BaseBrowser {
             status: authResp1.statusText(),
             response: authData1,
           });
-        }
       }
       const profilePromise = this.page.waitForResponse((response) => {
         return (
@@ -379,7 +372,7 @@ export class KnkyBrowser extends BaseBrowser {
         (response) => {
           return (
             response.url() ===
-              "https://backend.knky.co/v1/users/platform/consumables" &&
+            "https://backend.knky.co/v1/users/platform/consumables" &&
             response.request().method() === "GET"
           );
         },
@@ -517,13 +510,18 @@ export class KnkyBrowser extends BaseBrowser {
 
   private async checkFirstPost() {
     try {
+      const count = await this.page.locator("div.k-modal-content").count();
+      console.log("kmodal: ", count);
       await this.page
-        .locator("div.kmodal button", {
+        .locator("button", {
           hasText: "Start Your First Post",
         })
         .first()
-        .click({ timeout: 3000 });
-    } catch (e) {}
+        .click({ timeout: 10000 });
+      this.logger.info("accept first post tip");
+    } catch (e) {
+      this.logger.info("skip first post tip")
+    }
   }
 
   public async schedulePost(
@@ -658,7 +656,7 @@ export class KnkyBrowser extends BaseBrowser {
         (response) => {
           return (
             response.url() ===
-              "https://backend.knky.co/v1/posts/create-post-new" &&
+            "https://backend.knky.co/v1/posts/create-post-new" &&
             response.request().method() === "POST"
           );
         },
@@ -737,7 +735,7 @@ export class KnkyBrowser extends BaseBrowser {
         (response) => {
           return (
             response.url() ===
-              "https://backend.knky.co/v1/posts/create-post-new" &&
+            "https://backend.knky.co/v1/posts/create-post-new" &&
             response.request().method() === "POST"
           );
         },
@@ -760,8 +758,8 @@ export class KnkyBrowser extends BaseBrowser {
       return createData.data.post_id;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
-      throw new BotError("create post failed", {
-        where: "KnkyBrowser::createPost",
+      throw new BotError("schedule post failed", {
+        where: "KnkyBrowser::schedulePost",
         error: error.message,
         stack: error.stack,
       });
@@ -845,7 +843,7 @@ export class KnkyBrowser extends BaseBrowser {
           .locator("button.createpost-btn", { hasText: "Done" })
           .first()
           .click();
-      } catch (error) {}
+      } catch (error) { }
       // submit
       await this.page
         .locator("button.createpost-btn", { hasText: "Submit" })
