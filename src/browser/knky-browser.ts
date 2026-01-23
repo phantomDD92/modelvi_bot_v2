@@ -139,7 +139,7 @@ export class KnkyBrowser extends BaseBrowser {
           });
         if (message.includes("2FA")) {
           if (!setting.device) throw new AuthError("no security key");
-          await this.wait(3000);
+          await this.wait(10000);
           const code = await this.generate2FACode(setting.device);
           await this.page
             .locator("div#otpVerificationModal input")
@@ -166,6 +166,9 @@ export class KnkyBrowser extends BaseBrowser {
               status: authResp1.statusText(),
               response: authData1,
             });
+        } else if (authData.statusCode == 429) {
+          await this.wait(60000);
+          throw new BotError("too many request");
         } else {
           throw new BotError("login failed", {
             where: "KnkyBrowser::login",
@@ -178,7 +181,7 @@ export class KnkyBrowser extends BaseBrowser {
         }
       } else if (authData.data?.otp_required) {
         if (!setting.device) throw new AuthError("no security key");
-        await this.wait(3000);
+        await this.wait(10000);
         const code = await this.generate2FACode(setting.device);
         await this.page
           .locator("div#otpVerificationModal input")
@@ -197,7 +200,11 @@ export class KnkyBrowser extends BaseBrowser {
         const authResp1 = await authPromise1;
         const authData1 = await authResp1.json();
         // const authData1 = this.parsePayload(authPayload1.r)
-        if (!authResp1.ok())
+        if (!authResp1.ok()) {
+          if (authData1.statusCode == 429) {
+            await this.wait(60000);
+            throw new BotError("too many request");
+          }
           throw new AuthError("invalid security key", {
             where: "KnkyBrowser::login",
             method: "POST",
@@ -206,6 +213,7 @@ export class KnkyBrowser extends BaseBrowser {
             status: authResp1.statusText(),
             response: authData1,
           });
+        }
       }
       const profilePromise = this.page.waitForResponse((response) => {
         return (
@@ -752,8 +760,8 @@ export class KnkyBrowser extends BaseBrowser {
       return createData.data.post_id;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
-      throw new BotError("schedule post failed", {
-        where: "KnkyBrowser::schedulePost",
+      throw new BotError("create post failed", {
+        where: "KnkyBrowser::createPost",
         error: error.message,
         stack: error.stack,
       });
