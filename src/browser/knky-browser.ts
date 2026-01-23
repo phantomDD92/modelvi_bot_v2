@@ -694,20 +694,19 @@ export class KnkyBrowser extends BaseBrowser {
       const fromDate = new Date(Date.now() - (3600 * 1000 * 24 * 30)).toISOString()
       const toDate = new Date().toISOString();
       const response = await this.page.request.get(
-        `https://backend.knky.co/v1/users/monetisation/overview?fromDate=${fromDate}&toDate=${toDate}`,
+        `https://backend.knky.co/v1/users/overview?fromDate=${fromDate}&toDate=${toDate}&queryRange=month`,
         { headers: this.headers }
       );
       const respData = await response.json();
-      // const respData = this.parsePayload(respPayload.r)
       if (!response.ok() || respData.status != 200) {
         throw new BotError("get monthly analysis failed", {
           where: "KnkyBrowser::getMonthlyAnalysis",
-          path: `https://backend.knky.co/v1/users/monetisation/overview?fromDate=${fromDate}&toDate=${toDate}`,
+          path:  `https://backend.knky.co/v1/users/overview?fromDate=${fromDate}&toDate=${toDate}&queryRange=month`,
           response: respData
         })
       }
-      const earnings: IKnkyRevenue[] = respData.data || [];
-      return earnings.reduce((sum, earning) => sum += earning.totalAmount, 0)
+      const overview: IKnkyRevenue = respData.data;
+      return overview?.total_earning || 0;
     } catch (error: any) {
       console.error(error);
       return 0;
