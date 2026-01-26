@@ -49,20 +49,20 @@ export abstract class BaseBrowser {
     // create browser, context, page
 
     switch (this.config.platform) {
-      // case Platform.KNKY:
-      //   firefox.use(
-      //     RecaptchaPlugin({
-      //       provider: { id: "2captcha", token: this.config.captcha_key },
-      //       throwOnError: true,
-      //       solveScoreBased: true,
-      //     })
-      //   );
-      //   firefox.use(StealthPlugin());
-      //   this.browser = await firefox.launch({
-      //     headless: !this.config.debug,
-      //     proxy,
-      //   });
-      //   break;
+      case Platform.KNKY:
+        firefox.use(
+          RecaptchaPlugin({
+            provider: { id: "2captcha", token: this.config.captcha_key },
+            throwOnError: true,
+            solveScoreBased: true,
+          })
+        );
+        firefox.use(StealthPlugin());
+        this.browser = await firefox.launch({
+          headless: !this.config.debug,
+          proxy,
+        });
+        break;
 
       default:
         chromium.use(

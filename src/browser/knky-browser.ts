@@ -38,11 +38,11 @@ export class KnkyBrowser extends BaseBrowser {
   // set content filter
   protected async setFilter() {
     // filter images
-    await this.context.route(
-      /(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/,
-      (route) =>
-        route.request().method() == "GET" ? route.abort() : route.continue(),
-    );
+    // await this.context.route(
+    //   /(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/,
+    //   (route) =>
+    //     route.request().method() == "GET" ? route.abort() : route.continue(),
+    // );
     // filter google analytics
     await this.context.route(
       /https:\/\/www\.google-analytics\.com\/.*/,
