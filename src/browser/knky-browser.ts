@@ -389,7 +389,7 @@ export class KnkyBrowser extends BaseBrowser {
         (response) => {
           return (
             response.url() ===
-              "https://backend.knky.co/v1/users/platform/consumables" &&
+              "https://backend.knky.co/v1/users/custom-fan-list" &&
             response.request().method() === "GET"
           );
         },
