@@ -55,7 +55,7 @@ export abstract class BaseBrowser {
             provider: { id: "2captcha", token: this.config.captcha_key },
             throwOnError: true,
             solveScoreBased: true,
-          })
+          }),
         );
         firefox.use(StealthPlugin());
         this.browser = await firefox.launch({
@@ -70,7 +70,7 @@ export abstract class BaseBrowser {
             provider: { id: "2captcha", token: this.config.captcha_key },
             throwOnError: true,
             solveScoreBased: true,
-          })
+          }),
         );
         chromium.use(StealthPlugin());
         if (this.config.debug)
@@ -112,12 +112,12 @@ export abstract class BaseBrowser {
     // filter images
     await this.context.route(
       /(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/,
-      (route) => route.abort()
+      (route) => route.abort(),
     );
     // filter google analytics
     await this.context.route(
       /https:\/\/www\.google-analytics\.com\/.*/,
-      (route) => route.abort()
+      (route) => route.abort(),
     );
     // await this.context.route('**/*', (route, request) => {
     //   const resourceType = request.resourceType(); // e.g., 'image'
@@ -167,7 +167,7 @@ export abstract class BaseBrowser {
   }
 
   public abstract login(
-    setting: IAccountSettings
+    setting: IAccountSettings,
   ): Promise<IAccountID | undefined>;
 
   public async afterLogin(): Promise<void> {
@@ -195,7 +195,7 @@ export abstract class BaseBrowser {
             error: err.message,
             stack: err.stack,
             path: url,
-          })
+          }),
         );
       };
 
@@ -215,8 +215,8 @@ export abstract class BaseBrowser {
               if (downloadedBytes < 1000) {
                 handleError(
                   new Error(
-                    `Media size (${downloadedBytes} bytes) is too small`
-                  )
+                    `Media size (${downloadedBytes} bytes) is too small`,
+                  ),
                 );
               } else {
                 resolve(filepath);
@@ -273,7 +273,7 @@ export abstract class BaseBrowser {
           {
             clientKey: this.config.captcha_key,
             taskId,
-          }
+          },
         );
         const { errorId, status, ...params } = resp2.data;
         if (errorId > 0)
@@ -300,6 +300,26 @@ export abstract class BaseBrowser {
     }
   }
 
+  protected async solveRecaptchav2(
+    pageUrl: string,
+    siteKey: string,
+  ): Promise<string> {
+    try {
+      let solveRes2 = await this.solver.recaptcha({
+        pageurl: pageUrl,
+        googlekey: siteKey,
+        version: "v2",
+      });
+      return solveRes2.data;
+    } catch (error: any) {
+      throw new BotError("captcha solve failed", {
+        where: "BaseBrowser::solveRecaptchav2",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
   protected async wait(msecs: number): Promise<void> {
     return new Promise((resolve) => {
       setTimeout(() => {
@@ -311,7 +331,7 @@ export abstract class BaseBrowser {
   protected async waitAndLog(msecs: number, message: string): Promise<void> {
     return new Promise((resolve) => {
       setTimeout(() => {
-        this.logger.info(message), resolve();
+        (this.logger.info(message), resolve());
       }, msecs);
     });
   }

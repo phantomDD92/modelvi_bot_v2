@@ -22,7 +22,7 @@ export class BestFansBot extends PostBot {
 
   // init api service
   protected async initService(): Promise<void> {
-    this.service = new FakePostService(this.config, this.logger)
+    this.service = new PostApiService(this.config, this.logger)
     await super.initService();
   }
 
