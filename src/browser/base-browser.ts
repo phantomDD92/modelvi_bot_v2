@@ -50,6 +50,9 @@ export abstract class BaseBrowser {
 
     switch (this.config.platform) {
       case Platform.KNKY:
+      case Platform.MALOUM:
+        // Use Firefox for KNKY and MALOUM (harder to detect as bot)
+        // Don't use stealth plugin for Firefox - causes user-agent errors
         firefox.use(
           RecaptchaPlugin({
             provider: { id: "2captcha", token: this.config.captcha_key },
@@ -57,10 +60,18 @@ export abstract class BaseBrowser {
             solveScoreBased: true,
           })
         );
-        firefox.use(StealthPlugin());
+        // Only use StealthPlugin for KNKY, not MALOUM (causes issues)
+        if (this.config.platform === Platform.KNKY) {
+          firefox.use(StealthPlugin());
+        }
         this.browser = await firefox.launch({
           headless: !this.config.debug,
           proxy,
+          firefoxUserPrefs: {
+            "dom.webdriver.enabled": false,
+            "useAutomationExtension": false,
+            "privacy.resistFingerprinting": false,
+          },
         });
         break;
 

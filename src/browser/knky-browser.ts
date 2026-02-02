@@ -144,41 +144,70 @@ export class KnkyBrowser extends BaseBrowser {
           });
         if (message.includes("2FA")) {
           if (!setting.device) throw new AuthError("no security key");
-          await this.wait(3000);
-          const code = await this.generate2FACode(setting.device);
-          await this.page
-            .locator("div#otpVerificationModal input")
-            .first()
-            .fill(code);
-          const authPromise1 = this.page.waitForResponse((response) => {
-            return (
-              response.url() === "https://backend.knky.co/v1/users/login" &&
-              response.request().method() === "POST"
-            );
-          });
-          await this.page
-            .locator("div#otpVerificationModal button", { hasText: "Verify" })
-            .click();
-          const authResp1 = await authPromise1;
-          const authData1 = await authResp1.json();
-          // const authData1 = this.parsePayload(authPayload1.r)
-          if (!authResp1.ok()) {
+
+          // Retry 2FA up to 3 times with human-like delays
+          let lastError: any = null;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            this.logger.info(`2FA attempt ${attempt}/3`);
+            // Human-like delay: first attempt 2-4s, retries 32-45s (wait for new TOTP)
+            const delay = attempt === 1
+              ? 2000 + Math.random() * 2000
+              : 32000 + Math.random() * 13000;
+            await this.wait(delay);
+            const code = await this.generate2FACode(setting.device);
+            await this.page
+              .locator("div#otpVerificationModal input")
+              .first()
+              .fill(code);
+            const authPromise1 = this.page.waitForResponse((response) => {
+              return (
+                response.url() === "https://backend.knky.co/v1/users/login" &&
+                response.request().method() === "POST"
+              );
+            });
+            await this.page
+              .locator("div#otpVerificationModal button", { hasText: "Verify" })
+              .click();
+            const authResp1 = await authPromise1;
+            const authData1 = await authResp1.json();
+
+            if (authResp1.ok()) {
+              lastError = null;
+              break; // Success!
+            }
+
             if (authData1.statusCode == 429) {
-              await this.wait(60000);
+              // Rate limited - wait 60-90s before giving up
+              const rateLimitWait = 60000 + Math.random() * 30000;
+              this.logger.warn(`Rate limited, waiting ${Math.round(rateLimitWait/1000)}s`);
+              await this.wait(rateLimitWait);
               throw new BotError("too many request");
             }
-            throw new AuthError("invalid security key", {
+
+            lastError = {
               where: "KnkyBrowser::login",
               method: "POST",
               endpoint: "https://backend.knky.co/v1/users/login",
               params: authResp1.request().postData(),
               status: authResp1.statusText(),
               response: authData1,
-            });
+            };
+            this.logger.warn(`2FA attempt ${attempt} failed: ${authData1.message}`);
+          }
+
+          if (lastError) {
+            // Wait 30-60s before throwing to slow down restart cycle
+            const cooldown = 30000 + Math.random() * 30000;
+            this.logger.warn(`All 2FA attempts failed, cooling down ${Math.round(cooldown/1000)}s`);
+            await this.wait(cooldown);
+            throw new AuthError("wrong 2fa", lastError);
           }
         } else {
           if (authData.statusCode == 429) {
-            await this.wait(60000);
+            // Rate limited - wait 60-90s
+            const rateLimitWait = 60000 + Math.random() * 30000;
+            this.logger.warn(`Rate limited, waiting ${Math.round(rateLimitWait/1000)}s`);
+            await this.wait(rateLimitWait);
             throw new BotError("too many request");
           }
           throw new BotError("login failed", {
@@ -192,38 +221,65 @@ export class KnkyBrowser extends BaseBrowser {
         }
       } else if (authData.data?.otp_required) {
         if (!setting.device) throw new AuthError("no security key");
-        await this.wait(5000);
-        const code = await this.generate2FACode(setting.device);
-        await this.page
-          .locator("div#otpVerificationModal input")
-          .first()
-          .fill(code);
-        const authPromise1 = this.page.waitForResponse((response) => {
-          return (
-            response.url() ===
-              "https://backend.knky.co/v1/users/verify-login-otp" &&
-            response.request().method() === "POST"
-          );
-        });
-        await this.page
-          .locator("div#otpVerificationModal button", { hasText: "Verify" })
-          .click();
-        const authResp1 = await authPromise1;
-        const authData1 = await authResp1.json();
-        // const authData1 = this.parsePayload(authPayload1.r)
-        if (!authResp1.ok())
+
+        // Retry 2FA up to 3 times with human-like delays
+        let lastError: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          this.logger.info(`2FA verification attempt ${attempt}/3`);
+          // Human-like delay: first attempt 3-6s, retries 32-45s (wait for new TOTP)
+          const delay = attempt === 1
+            ? 3000 + Math.random() * 3000
+            : 32000 + Math.random() * 13000;
+          await this.wait(delay);
+          const code = await this.generate2FACode(setting.device);
+          await this.page
+            .locator("div#otpVerificationModal input")
+            .first()
+            .fill(code);
+          const authPromise1 = this.page.waitForResponse((response) => {
+            return (
+              response.url() ===
+                "https://backend.knky.co/v1/users/verify-login-otp" &&
+              response.request().method() === "POST"
+            );
+          });
+          await this.page
+            .locator("div#otpVerificationModal button", { hasText: "Verify" })
+            .click();
+          const authResp1 = await authPromise1;
+          const authData1 = await authResp1.json();
+
+          if (authResp1.ok()) {
+            lastError = null;
+            break; // Success!
+          }
+
           if (authData1.statusCode == 429) {
-            await this.wait(60000);
+            // Rate limited - wait 60-90s before giving up
+            const rateLimitWait = 60000 + Math.random() * 30000;
+            this.logger.warn(`Rate limited, waiting ${Math.round(rateLimitWait/1000)}s`);
+            await this.wait(rateLimitWait);
             throw new BotError("too many request");
           }
-        throw new AuthError("invalid security key", {
-          where: "KnkyBrowser::login",
-          method: "POST",
-          endpoint: "https://backend.knky.co/v1/users/verify-login-otp",
-          params: authResp1.request().postData(),
-          status: authResp1.statusText(),
-          response: authData1,
-        });
+
+          lastError = {
+            where: "KnkyBrowser::login",
+            method: "POST",
+            endpoint: "https://backend.knky.co/v1/users/verify-login-otp",
+            params: authResp1.request().postData(),
+            status: authResp1.statusText(),
+            response: authData1,
+          };
+          this.logger.warn(`2FA verification attempt ${attempt} failed: ${authData1.message}`);
+        }
+
+        if (lastError) {
+          // Wait 30-60s before throwing to slow down restart cycle
+          const cooldown = 30000 + Math.random() * 30000;
+          this.logger.warn(`All 2FA attempts failed, cooling down ${Math.round(cooldown/1000)}s`);
+          await this.wait(cooldown);
+          throw new AuthError("wrong 2fa", lastError);
+        }
       }
       const profilePromise = this.page.waitForResponse((response) => {
         return (
