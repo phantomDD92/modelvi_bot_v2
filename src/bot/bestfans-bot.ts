@@ -71,9 +71,14 @@ export class BestFansBot extends PostBot {
   // bot action for testing
   protected async doTest(): Promise<boolean> {
     try {
+      await this.browser.waitForTimeout(10000);
       const revenue = await this.browser.getMonthlyEarnings();
       console.log("Revenue :", revenue);
-      await this.browser.createPost("I don’t fake reactions. Ever.");
+      const contents = this.settings.params?.contents;
+      if (!contents || contents.length == 0)
+        return true;
+      // const content = contents[0];
+      // await this.browser.createPost("I don’t fake reactions. Ever.");
       return true;
     } catch (error: any) {
       console.error(error)

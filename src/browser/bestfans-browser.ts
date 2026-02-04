@@ -61,8 +61,8 @@ export class BestFansBrowser extends BaseBrowser {
       // wait recaptcha and solve it
       await this.page.locator('iframe[title="reCAPTCHA"]').first().waitFor();
       this.logger.info("start to solve captcha...");
-      const token: string = await this.retryAction(this.solveCaptcha);
-
+      const token = await this.solveCaptcha();
+      
       // set recaptcha response
       await this.page.evaluate((token) => {
         (document.querySelector('[name="recaptcha_token_v2"]',) as HTMLTextAreaElement).value = token;
