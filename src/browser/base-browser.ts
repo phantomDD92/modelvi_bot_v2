@@ -69,7 +69,7 @@ export abstract class BaseBrowser {
           proxy,
           firefoxUserPrefs: {
             "dom.webdriver.enabled": false,
-            "useAutomationExtension": false,
+            useAutomationExtension: false,
             "privacy.resistFingerprinting": false,
           },
         });
@@ -174,7 +174,7 @@ export abstract class BaseBrowser {
     try {
       const html = await this.page.content();
       await fs.promises.writeFile("debug.html", html, "utf8");
-    } catch (error: any) {}
+    } catch (error: any) { }
   }
 
   public abstract login(
@@ -345,5 +345,27 @@ export abstract class BaseBrowser {
         (this.logger.info(message), resolve());
       }, msecs);
     });
+  }
+
+  // retry action
+  protected async retryAction(action: any, ...params: any[]): Promise<any> {
+    let attempt = 0;
+    while (attempt < 3) {
+      try {
+        const ret = await action(...params);
+        return ret;
+      } catch (err) {
+        attempt++;
+        if (attempt >= 3) {
+          throw err;
+        }
+      }
+    }
+  }
+
+  protected getLastPathFromUrl(url: string): string {
+    var segs = url.split("/");
+    const path = segs[segs.length - 1];
+    return path;
   }
 }
