@@ -71,7 +71,7 @@ export class F2fBrowser extends BaseBrowser {
       await this.page.goto("https://f2f.com/login/", { timeout: 120000 });
 
       // input login credentials
-      await this.page.locator('input[name="username"]').fill(setting.email);
+      await this.page.locator('input[name="email"]').fill(setting.email);
       await this.page.locator('input[name="password"]').fill(setting.password);
       await this.page.waitForTimeout(1000);
 
