@@ -64,9 +64,6 @@ export class BestFansBot extends PostBot {
     return false;
   }
 
-  protected needUpdate(): boolean {
-    return false;
-  }
 
   // bot action for testing
   protected async doTest(): Promise<boolean> {

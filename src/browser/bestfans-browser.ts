@@ -32,7 +32,7 @@ export class BestFansBrowser extends BaseBrowser {
 
   private async solveCaptcha() {
     try {
-      await this.page.solveRecaptchas();
+      // await this.page.solveRecaptchas();
       const token = await this.solveRecaptchav2(
         this.page.url(),
         "6LeWV9YUAAAAAC9_GlCpLPliiQ1FITKhBOzRjHvw",
@@ -62,7 +62,7 @@ export class BestFansBrowser extends BaseBrowser {
       await this.page.locator('iframe[title="reCAPTCHA"]').first().waitFor();
       this.logger.info("start to solve captcha...");
       const token = await this.solveCaptcha();
-      
+
       // set recaptcha response
       await this.page.evaluate((token) => {
         (document.querySelector('[name="recaptcha_token_v2"]',) as HTMLTextAreaElement).value = token;
@@ -97,7 +97,7 @@ export class BestFansBrowser extends BaseBrowser {
   public async afterLogin(): Promise<void> {
     try {
       // close enable notification dialog
-      await this.page.locator("div.modal-dialog button#pushSubscriptionPermissionModalDeclineButton",).last().click({ timeout: 3000 });
+      await this.page.locator("div.modal-dialog button#pushSubscriptionPermissionModalDeclineButton",).last().click({ timeout: 10000 });
       this.logger.info("close push subscription permission modal");
     } catch (error: any) { }
   }
@@ -130,6 +130,7 @@ export class BestFansBrowser extends BaseBrowser {
       await this.page.goto(`https://www.bestfans.com/${this.profile.alias}`, { waitUntil: "domcontentloaded", });
 
       // click create-post button
+      await this.page.waitForTimeout(3000);
       await this.page.locator("div.main-container > section.cta-section a.btn").first().click();
       // set post title
       await this.page.locator("form#posting_upload textarea#post-create-textarea").first().fill(title);
@@ -142,9 +143,10 @@ export class BestFansBrowser extends BaseBrowser {
       // upload image
       const [fileChooser] = await Promise.all([
         this.page.waitForEvent("filechooser"),
-        this.page.locator("form#posting_upload div.upload-container--btn button", { hasText: "Upload media", }).click(),
+        this.page.locator("form#posting_upload div.upload-container--btn button[validation-name='uploads']").first().click(),
       ]);
       await fileChooser.setFiles(image);
+      
     } catch (error: any) {
       throw new BotError("create post failed", {
         where: "BestFansBrowser::createPost",
