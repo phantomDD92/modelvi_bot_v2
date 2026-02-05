@@ -1,10 +1,10 @@
-import { AuthError, BotError, ProxyError } from "../utils/error";
-import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
-import { Logger } from "../utils/logger";
+import moment from "moment";
 import { BaseBrowser } from "./base-browser";
 import { PostType } from "../types/constant";
 import { IFancentroLabel, IFancentroPost, IFancentroProfile, IFancentroVaultItem } from "../types/fancentro";
-import moment from "moment";
+import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
+import { AuthError, BotError, ProxyError } from "../utils/error";
+import { Logger } from "../utils/logger";
 
 export class FancentroBrowser extends BaseBrowser {
 
@@ -19,7 +19,8 @@ export class FancentroBrowser extends BaseBrowser {
   // set content filter
   protected async setFilter() {
     // filter images
-    await this.context.route(/(.*pix\-cdn77-fc\.xrcdn\.com\/.*)|(.*pix\-cdn77\.mainhubcdn\.com\/.*)|(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/, route => route.abort())
+    await this.context.route(/(.*pix\-cdn77-fc\.xrcdn\.com\/.*)|(.*pix\-cdn77\.mainhubcdn\.com\/.*)|(\.png(\?.*)?$)|(\.jpg(\?.*)?$)|(\.webp(\?.*)?$)|(\.jpeg(\?.*)?$)|(blob(.*)?$)/,
+      route => route.request().method() == "GET" ? route.abort() : route.continue())
     // filter google analytics
     await this.context.route(/https:\/\/www\.google-analytics\.com\/.*/, route => route.abort());
   }
@@ -31,8 +32,7 @@ export class FancentroBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
         where: "FancentroBrowser::home",
-        error: error.message,
-        stack: error.stack,
+        message: error.message
       });
     }
   }
@@ -57,40 +57,41 @@ export class FancentroBrowser extends BaseBrowser {
     else
       await this.page.getByRole('button', { name: 'LOG IN' }).click();
     const authResp = await authPromise;
-    if (!authResp.ok()) throw new BotError("login failed", {
-      where: "FancentroBrowser::login",
-      method: "POST",
-      endpoint: "https://fancentro.com/api/v1/api/authenticate",
-      params: authResp.request().postData(),
-      status: authResp.statusText(),
-      response: await authResp.text(),
-    })
+    if (!authResp.ok())
+      throw new BotError("login failed", {
+        where: "FancentroBrowser::getAuthResult",
+        method: "POST",
+        endpoint: "https://fancentro.com/api/v1/api/authenticate",
+        params: authResp.request().postData(),
+        status: authResp.statusText(),
+        response: await authResp.text(),
+      })
     try {
       const respData = await authResp.json();
       const message = respData.message || "";
       if (message.includes("Invalid"))
         throw new AuthError("wrong credentials", {
           where: "FancentroBrowser::login",
-          error: "invalid email, password",
+          message: "invalid email, password",
         });
       else if (message.includes("Captcha"))
         return "captcha"
       else if (message.includes("Something went wrong"))
         throw new AuthError("something went wrong", {
           where: "FancentroBrowser::getAuthResult",
-          response: await authResp.text(),
+          message: await authResp.text(),
         });
       else if (message.includes("Account disabled"))
         throw new AuthError("account blocked", {
           where: "FancentroBrowser::getAuthResult",
-          response: await authResp.text(),
+          message: await authResp.text(),
         });
       if (respData.twoStepVerification) {
         return "twofa";
       }
       throw new BotError("login failed", {
         where: "FancentroBrowser::getAuthResult",
-        response: await authResp.text(),
+        message: await authResp.text(),
       });
     } catch (error) {
       if (error instanceof BotError)
@@ -99,12 +100,22 @@ export class FancentroBrowser extends BaseBrowser {
     }
   }
 
+  private async solveCaptcha() {
+    try {
+      await this.page.solveRecaptchas();
+    } catch (error: any) {
+      throw new BotError("solve captcha failed", {
+        where: "FancentroBrowser::solveCaptcha",
+        message: error.message,
+      })
+    }
+  }
+
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
     try {
       // goto login page
       await this.page.locator("header button.mui-style-ctfnfu").waitFor();
       await this.page.locator("header button.mui-style-ctfnfu").click();
-
       await this.page.locator("form button.mui-style-qrm5bi").click();
 
       // await this.page.waitForLoadState('load');
@@ -114,36 +125,36 @@ export class FancentroBrowser extends BaseBrowser {
       await this.page.locator('input[name="email"]').fill(`${setting.email}`);
       await this.page.locator('input[name="password"]').fill(`${setting.password}`);
       // await this.page.locator('input[name="remember_me"]').setChecked(true);
+
       // click login button
       await this.page.waitForTimeout(500);
       this.logger.info("try to login");
       let authResult = await this.getAuthResult();
       if (authResult == "captcha") {
-        await this.page.solveRecaptchas();
+        await this.solveCaptcha();
         this.logger.info("solve captcha");
         authResult = await this.getAuthResult();
       }
       if (authResult == "captcha")
         throw new BotError("captcha failed", {
           where: "FancentroBrowser::login",
-          error: "failed to solve captcha",
+          message: "solve captcha failed",
         });
       if (authResult == "twofa") {
         if (!setting.device)
           throw new AuthError("no security key", {
             where: "FancentroBrowser::login",
-            error: "no security key",
+            message: "no security key",
           });
         const code = await this.generate2FACode(setting.device)
         await this.page.locator("input[name='verification_code']").waitFor();
         await this.page.locator("input[name='verification_code']").fill(code);
-        // await this.page.locator("form button", { hasText: "VERIFY" }).click();
         authResult = await this.getAuthResult(true);
       }
       if (authResult != "success") {
         throw new BotError(`${authResult} failed`, {
           where: "FancentroBrowser::login",
-          error: "invalid security key",
+          message: "invalid security key",
         });
       }
       const profilePromise = this.page.waitForResponse(response =>
@@ -154,12 +165,12 @@ export class FancentroBrowser extends BaseBrowser {
       if (profileData.showCompleteProfileModal == 'NO_PURCHASES_USER')
         throw new AuthError("profile consent required", {
           where: "FancentroBrowser::login",
-          profile: profileData
+          profile: await profileResp.text()
         });
       if (profileData.twoFactorAuthenticationStatus == 'inactive')
         throw new AuthError("two factor required", {
           where: "FancentroBrowser::login",
-          profile: profileData
+          profile: await profileResp.text()
         });
       this.profile.alias = setting.alias;
       // go to dashboard page
@@ -181,7 +192,6 @@ export class FancentroBrowser extends BaseBrowser {
       const channelReq = await channelPromise;
       this.headers = await channelReq.allHeaders();
       this.logger.info("go to dashboard page");
-      // await this.page.waitForTimeout(600000);
       return { alias: this.profile.alias, id: `${this.profile.id}` }
     } catch (error: any) {
       console.error(error)
@@ -190,8 +200,7 @@ export class FancentroBrowser extends BaseBrowser {
       else
         throw new BotError("login failed", {
           where: "FancentroBrowser::login",
-          error: error.message,
-          stack: error.stack,
+          message: error.message
         })
     }
   }
@@ -285,8 +294,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("find or create folder failed", {
         where: "FancentroBrowser::findOrCreateFolder",
-        error: error.message,
-        stack: error.stack,
+        message: error.message
       })
     }
   }
@@ -397,8 +405,8 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("get vault failed", {
         where: "FancentroBrowser::getVault",
-        error: error.message,
-        stack: error.stack
+        message: error.message
+        
       })
     }
   }
@@ -449,8 +457,8 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("get posts failed", {
         where: "FancentroBrowser::getPosts",
-        error: error.message,
-        stack: error.stack
+        message: error.message
+        
       })
     }
   }
@@ -474,8 +482,8 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("delete post failed", {
         where: "FancentroBrowser::deletePost",
-        error: error.message,
-        stack: error.stack
+        message: error.message
+        
       })
     }
   }
@@ -584,7 +592,7 @@ export class FancentroBrowser extends BaseBrowser {
         where: "FancentroBrowser::schedulePost",
         method: "POST",
         endpoint: "https://fancentro.mainhub.com/posts/create",
-        params:JSON.stringify(params),
+        params: JSON.stringify(params),
         status: resp.statusText(),
         response: await resp.text()
       });
@@ -594,8 +602,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("schedule post failed", {
         where: "FancentroBrowser::schedulePost",
-        error: error.message,
-        stack: error.stack
+        message: error.message
       })
     }
   }
@@ -632,8 +639,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("get earnings failed", {
         where: "FancentroBrowser::getMonthlyEarnings",
-        error: error.message,
-        stack: error.stack
+        message: error.message
       });
     }
   }
