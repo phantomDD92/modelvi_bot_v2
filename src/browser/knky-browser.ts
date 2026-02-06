@@ -83,9 +83,9 @@ export class KnkyBrowser extends BaseBrowser {
     } catch (error: any) {}
   }
 
-  private parsePayload(payload: string) {
+  private parsePayload(payload: any) {
     const decrypted = CryptoJS.AES.decrypt(
-      payload,
+      payload.r,
       "tf-xzqAvxsItJ59feJ2oxlUyOaDnhKPc",
     );
     const plainText = decrypted.toString(CryptoJS.enc.Utf8);
@@ -120,8 +120,8 @@ export class KnkyBrowser extends BaseBrowser {
         .click();
       // await this.page.goto(setting.device);
       const authResp = await authPromise;
-      const authData = await authResp.json();
-      // const authData = this.parsePayload(authPayload.r)
+      const authPayload = await authResp.json();
+      const authData = this.parsePayload(authPayload)
       if (!authResp.ok()) {
         const message = authData.message;
         if (message.includes("Incorrect"))
@@ -169,8 +169,9 @@ export class KnkyBrowser extends BaseBrowser {
               .locator("div#otpVerificationModal button", { hasText: "Verify" })
               .click();
             const authResp1 = await authPromise1;
-            const authData1 = await authResp1.json();
-
+            
+            const authPayload1 = await authResp1.json();
+            const authData1 = this.parsePayload(authPayload1)
             if (authResp1.ok()) {
               lastError = null;
               break; // Success!
@@ -247,8 +248,8 @@ export class KnkyBrowser extends BaseBrowser {
             .locator("div#otpVerificationModal button", { hasText: "Verify" })
             .click();
           const authResp1 = await authPromise1;
-          const authData1 = await authResp1.json();
-
+          const authPayload1 = await authResp1.json();
+          const authData1 = this.parsePayload(authPayload1)
           if (authResp1.ok()) {
             lastError = null;
             break; // Success!
@@ -298,8 +299,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await profileResp.text(),
         });
       }
-      const profileData = await profileResp.json();
-      // const profileData = this.parsePayload(profilePayload.r);
+      const profilePayload = await profileResp.json();
+      const profileData = this.parsePayload(profilePayload);
       this.profile = profileData.data[0];
       this.headers = await profileResp.request().allHeaders();
       return { alias: this.profile.username, id: this.profile._id };
@@ -334,8 +335,8 @@ export class KnkyBrowser extends BaseBrowser {
             response: await resp.text(),
           });
       }
-      const respData = await resp.json();
-      // const respData = this.parsePayload(respPayload.r);
+      const respPayload = await resp.json();
+      const respData = this.parsePayload(respPayload);
       if (respData.status != 200) {
         throw new BotError("get folders failed", {
           where: "KnkyBrowser::getFolders",
@@ -384,8 +385,8 @@ export class KnkyBrowser extends BaseBrowser {
             response: await resp.text(),
           });
       }
-      const respData = await resp.json();
-      // const respData = this.parsePayload(respPayload.r)
+      const respPayload = await resp.json();
+      const respData = this.parsePayload(respPayload)
       if (respData.status != 201) {
         throw new BotError("create folder failed", {
           where: "KnkyBrowser::createFolder",
@@ -499,8 +500,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await resp.text(),
         });
       }
-      const respData = await resp.json();
-      // const respData = this.parsePayload(respPayload.r)
+      const respPayload = await resp.json();
+      const respData = this.parsePayload(respPayload)
       return respData.data;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
@@ -532,8 +533,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await resp.text(),
         });
       }
-      const respData = await resp.json();
-      // const respData = this.parsePayload(respPayload.r);
+      const respPayload = await resp.json();
+      const respData = this.parsePayload(respPayload);
       return respData.data;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
@@ -747,8 +748,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await createResp.text(),
         });
       }
-      const createData = await createResp.json();
-      // const createData = this.parsePayload(createPayload.r);
+      const createPayload = await createResp.json();
+      const createData = this.parsePayload(createPayload);
       return createData.data.post_id;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
@@ -826,8 +827,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await createResp.text(),
         });
       }
-      const createData = await createResp.json();
-      // const createData = this.parsePayload(createPayload.r);
+      const createPayload = await createResp.json();
+      const createData = this.parsePayload(createPayload);
       return createData.data.post_id;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
@@ -945,8 +946,8 @@ export class KnkyBrowser extends BaseBrowser {
           response: await createResp.text(),
         });
       }
-      const createData = await createResp.json();
-      // const createData = this.parsePayload(createPayload.r);
+      const createPayload = await createResp.json();
+      const createData = this.parsePayload(createPayload);
       return createData.data?.story_id;
     } catch (error: any) {
       if (error instanceof BotError) throw error;
@@ -981,8 +982,8 @@ export class KnkyBrowser extends BaseBrowser {
             response: await resp.text(),
           });
       }
-      const respData = await resp.json();
-      // const respData = this.parsePayload(respPayload.r);
+      const respPayload = await resp.json();
+      const respData = this.parsePayload(respPayload);
       const stories: IKnkyStoryData[] = respData.data || [];
       const storyData = stories.find((item) => item._id == this.profile._id);
       return (storyData?.story_data || []).filter(
@@ -1008,7 +1009,8 @@ export class KnkyBrowser extends BaseBrowser {
         `https://backend.knky.co/v1/users/overview?fromDate=${fromDate}&toDate=${toDate}&queryRange=month`,
         { headers: this.headers },
       );
-      const respData = await response.json();
+      const respPayload = await response.json();
+      const respData = this.parsePayload(respPayload);
       if (!response.ok() || respData.status != 200) {
         throw new BotError("get monthly analysis failed", {
           where: "KnkyBrowser::getMonthlyAnalysis",
