@@ -1,30 +1,12 @@
-import {
-  AuthError,
-  BotError,
-  ProxyError,
-  SessionTimeoutError,
-} from "../utils/error";
-import { POST_LIMITED, PostType } from "../types/constant";
-import {
-  IAccountID,
-  IAccountSettings,
-  IBotConfig,
-  IChatMessage,
-  IContent,
-} from "../types/interface";
-import {
-  IMaloumCategory,
-  IMaloumChat,
-  IMaloumFolder,
-  IMaloumMediaInfo,
-  IMaloumPost,
-  IMaloumProfile,
-} from "../types/maloum";
-import { Logger } from "../utils/logger";
-import { BaseBrowser } from "./base-browser";
 import moment from "moment";
 import fs from "fs";
 import { HttpStatusCode } from "axios";
+import { AuthError, BotError, ProxyError, SessionTimeoutError, } from "../utils/error";
+import { POST_LIMITED, PostType } from "../types/constant";
+import { IAccountID, IAccountSettings, IBotConfig, IChatMessage, } from "../types/interface";
+import { IMaloumChat, IMaloumFolder, IMaloumMediaInfo, IMaloumPost, IMaloumProfile, } from "../types/maloum";
+import { Logger } from "../utils/logger";
+import { BaseBrowser } from "./base-browser";
 
 interface IMaloumTokenResponse {
   access_token: string;
@@ -51,15 +33,13 @@ export class MaloumBrowser extends BaseBrowser {
           const response = await route.fetch();
           const body = fs.readFileSync("./data/maloum.dat");
           route.fulfill({
-            response,
-            body: body,
-            headers: response.headers(),
+            response, body: body, headers: response.headers(),
           });
         },
       );
       // Track last captcha solve time to avoid rapid solving
       let lastCaptchaSolveTime = 0;
-      
+
       this.page.on("console", async (msg) => {
         if (msg.text().includes("intercepted-params:")) {
           // Cooldown: only solve captcha once per 30 seconds
@@ -84,7 +64,7 @@ export class MaloumBrowser extends BaseBrowser {
             if (params.action) solverParams.action = params.action;
             if (params.data) solverParams.data = params.data;
             if (params.pagedata) solverParams.pagedata = params.pagedata;
-            
+
             const res = await this.solver.cloudflareTurnstile(solverParams);
             this.logger.info(`solve captcha... token length: ${res.data?.length || 0}`);
 
@@ -141,15 +121,12 @@ export class MaloumBrowser extends BaseBrowser {
           }
         }
       });
-      await this.page.goto("https://maloum.com/", {
-        waitUntil: "domcontentloaded",
-        timeout: 60000,
-      });
+
+      await this.page.goto("https://maloum.com/", { waitUntil: "domcontentloaded", timeout: 60000, });
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
         where: "MaloumBrowser::home",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -160,12 +137,9 @@ export class MaloumBrowser extends BaseBrowser {
 
   private async closeConsentModal() {
     try {
-      await this.page
-        .locator("div#cmpbox span#cmpwelcomebtnyes > a.cmpboxbtnyes ")
-        .first()
-        .click({ timeout: 10000 });
+      await this.page.locator("div#cmpbox span#cmpwelcomebtnyes > a.cmpboxbtnyes ").first().click({ timeout: 10000 });
       this.logger.info("close consent modal");
-    } catch (error: any) {}
+    } catch (error: any) { }
   }
 
   public async refreshSession(): Promise<void> {
@@ -180,8 +154,7 @@ export class MaloumBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new BotError("refresh session failed", {
         where: "MaloumBrowser::refreshSession",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -219,67 +192,53 @@ export class MaloumBrowser extends BaseBrowser {
     setting: IAccountSettings,
   ): Promise<IAccountID | undefined> {
     try {
-      // await this.page.waitForTimeout(60000);
       // go to login page
-      await this.page.goto("https://app.maloum.com/login?returnPath=/", {
-        waitUntil: "domcontentloaded",
-        timeout: 60000,
-      });
+      await this.page.goto("https://app.maloum.com/login?returnPath=/", { waitUntil: "domcontentloaded", timeout: 60000, });
       this.closeConsentModal();
       // input email and password
       await this.page.locator("form input[name='usernameOrEmail']").waitFor();
-      await this.page
-        .locator("form input[name='usernameOrEmail']")
-        .first()
-        .fill(setting.email);
-      await this.page
-        .locator("form input[name='password']")
-        .first()
-        .fill(setting.password);
+      await this.page.locator("form input[name='usernameOrEmail']").first().fill(setting.email);
+      await this.page.locator("form input[name='password']").first().fill(setting.password);
 
-      // prepare wait login response
-      // const mePromise = this.page.waitForResponse(response => {
-      //   return response.url() === "https://api.maloum.com/users/me" && response.request().method() === "GET"
-      // }, { timeout: 30000 });
-      const loginPromise = this.page.waitForResponse(
-        "https://api.maloum.com/user-management/login",
-        { timeout: 60000 }  // 60 second timeout
-      );
-
+      const loginPromise = this.page.waitForResponse("https://api.maloum.com/user-management/login", { timeout: 60000 });
       // click sign-in button
-      await this.page
-        .locator("form button", { hasText: "Login" })
-        .first()
-        .click();
+      await this.page.locator("form button", { hasText: "Login" }).first().click();
       const loginResp = await loginPromise;
+
       const loginBody = await loginResp.text();
+      if (loginResp.status() == HttpStatusCode.Unauthorized)
+        throw new AuthError("wrong credentials", {
+          where: "MaloumBrowser::login",
+          response: loginBody.substring(0, 500),
+        });
+
       let loginData;
       try {
         loginData = JSON.parse(loginBody);
       } catch {
-        throw new AuthError("wrong credentials", {
+        throw new BotError("login failed", {
           where: "MaloumBrowser::login",
           response: loginBody.substring(0, 500),
         });
       }
-      
+
       if (!loginData.accessToken) {
-        throw new AuthError("wrong credentials", {
+        throw new BotError("login failed", {
           where: "MaloumBrowser::login",
           response: loginBody.substring(0, 500),
         });
       }
-      
+
       this.logger.info("login API success");
-      
+
       // Store token in headers
       this.headers["Authorization"] = `Bearer ${loginData.accessToken}`;
-      
+
       // Parse JWT to get user info
       const jwtParts = loginData.accessToken.split(".");
       const payloadJson = Buffer.from(jwtParts[1], "base64").toString("utf-8");
       const jwt = JSON.parse(payloadJson);
-      
+
       this.profile = {
         _id: jwt.app_metadata?.userId || jwt.sub,
         username: jwt.app_metadata?.username || jwt.email?.split("@")[0],
@@ -296,12 +255,12 @@ export class MaloumBrowser extends BaseBrowser {
         registeredAt: new Date().toISOString(),
         subscriptionPrice: 0,
       };
-      
+
       this.logger.info(`user: ${this.profile.username}, isCreator: ${this.profile.isCreator}`);
-      
+
       if (!this.profile.isCreator)
         throw new AuthError("not creator account", { where: "MaloumBrowser::login" });
-      
+
       // Set tokens in localStorage to establish session for app.maloum.com
       this.logger.info("injecting auth token into localStorage...");
       try {
@@ -340,7 +299,7 @@ export class MaloumBrowser extends BaseBrowser {
       } catch (e: any) {
         // Ignore errors
       }
-      
+
       // Wait for initial Cloudflare challenge to be solved
       this.logger.info("waiting for captcha to be solved...");
       const startWait = Date.now();
@@ -351,7 +310,7 @@ export class MaloumBrowser extends BaseBrowser {
           this.logger.info(`still waiting for captcha... (${Math.floor((Date.now() - startWait) / 1000)}s)`);
         }
       }
-      
+
       if (this.captchaSolved) {
         this.logger.info("captcha solved, waiting for Cloudflare validation...");
         try {
@@ -390,8 +349,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("login failed", {
         where: "MaloumBrowser::login",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -400,13 +358,7 @@ export class MaloumBrowser extends BaseBrowser {
     try {
       let folder;
       // find folder
-      const resp = await this.page.request.get(
-        "https://api.maloum.com/vault/folders",
-        {
-          headers: this.headers,
-          params: { limit: 15 },
-        },
-      );
+      const resp = await this.page.request.get("https://api.maloum.com/vault/folders", { headers: this.headers, params: { limit: 15 }, });
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
@@ -422,12 +374,10 @@ export class MaloumBrowser extends BaseBrowser {
       }
       const respData = await resp.json();
       const folders: IMaloumFolder[] = respData.data || [];
-      folder = folders.find(
-        (item) => item.name.toLowerCase() == folderName.toLowerCase(),
-      );
-      if (folder) return folder;
-      const resp1 = await this.page.request.post(
-        "https://api.maloum.com/vault/folders",
+      folder = folders.find((item) => item.name.toLowerCase() == folderName.toLowerCase());
+      if (folder)
+        return folder;
+      const resp1 = await this.page.request.post("https://api.maloum.com/vault/folders",
         { headers: this.headers, data: { name: folderName } },
       );
       if (!resp1.ok()) {
@@ -449,8 +399,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("get folder failed", {
         where: "MaloumBrowser::getFolder",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -482,8 +431,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("delete folder failed", {
         where: "MaloumBrowser::deleteFolder",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -531,8 +479,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("get posts failed", {
         where: "MaloumBrowser::getSelfPosts",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -546,12 +493,12 @@ export class MaloumBrowser extends BaseBrowser {
           headers: this.headers,
         }
       );
-      
+
       if (!resp.ok()) {
         this.logger.info(`getSelfFreePosts failed: ${resp.status()}`);
         return [];
       }
-      
+
       const meData = await resp.json();
       const posts: IMaloumPost[] = meData.data || [];
       return posts
@@ -597,8 +544,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("get posts failed", {
         where: "MaloumBrowser::getRecentPosts",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -636,8 +582,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("find media failed", {
         where: "MaloumBrowser::findMediaInFolder",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -685,8 +630,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("delete post failed", {
         where: "MaloumBrowser::deletePost",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -717,8 +661,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("follow post failed", {
         where: "MaloumBrowser::followPost",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -751,8 +694,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("comment post failed", {
         where: "MaloumBrowser::commentPost",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -790,8 +732,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("get chats failed", {
         where: "MaloumBrowser::getUnreadChats",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -804,7 +745,7 @@ export class MaloumBrowser extends BaseBrowser {
         "https://api.maloum.com/users/balance",
         { headers: this.headers, timeout: 30000 }
       );
-      
+
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
@@ -814,7 +755,7 @@ export class MaloumBrowser extends BaseBrowser {
         this.logger.info(`getMonthlyEarnings failed: ${resp.status()}`);
         return 0;
       }
-      
+
       const respData = await resp.json();
       this.logger.info(`earnings: ${respData.balance?.payoutAmount || 0}`);
       return respData.balance?.payoutAmount || 0;
@@ -910,8 +851,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("schedule post failed", {
         where: "MaloumBrowser::schedulePost",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
@@ -1000,16 +940,12 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("publish post failed", {
         where: "MaloumBrowser::publishPost",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
 
-  public async uploadMediaInFolder(
-    folder: string,
-    image: string,
-  ): Promise<string> {
+  public async uploadMediaInFolder(folder: string, image: string,): Promise<string> {
     try {
       // First check if the browser/page is still valid
       try {
@@ -1061,8 +997,8 @@ export class MaloumBrowser extends BaseBrowser {
             const pageContent = await this.page.content();
             // Check if challenge is gone (no turnstile iframe or challenge text)
             const hasTurnstile = pageContent.includes("turnstile") ||
-                                 pageContent.includes("cf-turnstile") ||
-                                 pageContent.includes("challenge-platform");
+              pageContent.includes("cf-turnstile") ||
+              pageContent.includes("challenge-platform");
             if (!hasTurnstile) {
               this.logger.info("Cloudflare challenge cleared");
               break;
@@ -1074,22 +1010,22 @@ export class MaloumBrowser extends BaseBrowser {
             break;
           }
         }
-        
+
         const url = this.page.url();
         this.logger.info(`Vault navigation URL: ${url}`);
-        
+
         // Check if we're on login page (session not valid)
         if (url.includes("/login")) {
           this.logger.info("Redirected to login - session not established");
           return "";
         }
-        
+
         // Check if we actually reached vault
         if (!url.includes("/vault")) {
           this.logger.info("Vault page not reachable, skipping upload");
           return "";
         }
-        
+
         // Wait for vault UI to load (check for folder search or any content)
         try {
           await this.page.waitForSelector("div#leftColumn", { timeout: 30000 });
@@ -1113,7 +1049,7 @@ export class MaloumBrowser extends BaseBrowser {
             waitUntil: "domcontentloaded",
             timeout: 30000,
           });
-        } catch {}
+        } catch { }
         return "";
       }
       // search folder
@@ -1300,8 +1236,7 @@ export class MaloumBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("upload media failed", {
         where: "MaloumBrowser::uploadMediaInFolder",
-        error: error.message,
-        stack: error.stack,
+        message: error.message,
       });
     }
   }
