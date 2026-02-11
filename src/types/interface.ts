@@ -139,6 +139,8 @@ export interface IContent {
   f2fStoryType?: number,
   description?: string,
   postTags: string[],
+  deleted?: boolean,
+  failed?: number,
 }
 
 export interface ISchedulePost {
