@@ -84,3 +84,6 @@ export const ActionType = {
   BALANCE: 7,
   SCHEDULE: 8,
 }
+
+export const DEFAULT_RETRY_COUNT = 2;
+export const DEFAULT_RETRY_INTERVAL = 2000;
