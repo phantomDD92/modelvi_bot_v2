@@ -61,9 +61,9 @@ export abstract class BaseBrowser {
           }),
         );
         // Only use StealthPlugin for KNKY, not MALOUM (causes issues)
-        if (this.config.platform === Platform.KNKY) {
-          firefox.use(StealthPlugin());
-        }
+        // if (this.config.platform === Platform.KNKY) {
+        //   firefox.use(StealthPlugin());
+        // }
         this.browser = await firefox.launch({
           headless: !this.config.debug,
           proxy,
@@ -186,7 +186,7 @@ export abstract class BaseBrowser {
   }
 
   public async waitForTimeout(timeout: number) {
-    await this.page.waitForTimeout(timeout);
+    await new Promise(resolve => setTimeout(resolve, timeout));
   }
 
   protected async downloadFile(file: string): Promise<string> {
