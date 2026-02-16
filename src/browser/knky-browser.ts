@@ -52,6 +52,7 @@ export class KnkyBrowser extends BaseBrowser {
       try {
         await this.page.goto("https://knky.co/", { waitUntil: "domcontentloaded", timeout: 100000, });
         this.logger.info("go to home page");
+        return;
       } catch (error: any) {
         if (i === DEFAULT_RETRY_COUNT - 1)
           throw new ProxyError("proxy blocked", {
@@ -98,12 +99,12 @@ export class KnkyBrowser extends BaseBrowser {
       await this.wait(delay);
       // generate 2FA code
       const code = await this.generate2FACode(setting.device);
-      await this.page.locator("div#otpVerificationModal input").first().fill(code);
+      await this.page.locator("div#drawerModal input").first().fill(code);
       // click verify button and wait response
       const authPromise1 = this.page.waitForResponse((response) =>
         response.url() === "https://backend.knky.co/v1/users/login" && response.request().method() === "POST"
       );
-      await this.page.locator("div#otpVerificationModal button", { hasText: "Verify" }).click();
+      await this.page.locator("div#drawerModal button", { hasText: "Verify" }).click();
 
       const authResp1 = await authPromise1;
       const authPayload1 = await authResp1.json();
@@ -146,18 +147,18 @@ export class KnkyBrowser extends BaseBrowser {
       // click sign in button to show sign in modakl
       await this.wait(5000);
       await this.page.locator("header button", { hasText: "Sign In" }).click();
-      await this.page.locator("div#SignInModal").waitFor();
+      await this.page.locator("div#drawerModal").waitFor();
 
       // set email and password
-      await this.page.locator("div#SignInModal input[name='username']").fill(setting.email);
-      await this.page.locator("div#SignInModal input[name='password']").fill(setting.password);
+      await this.page.locator("div#drawerModal input[name='username']").fill(setting.email);
+      await this.page.locator("div#drawerModal input[name='password']").fill(setting.password);
       await this.wait(5000);
 
       // click sign-in button, wait response
       const authPromise = this.page.waitForResponse((response) =>
         response.url() === "https://backend.knky.co/v1/users/login" && response.request().method() === "POST"
       );
-      await this.page.locator("div#SignInModal button", { hasText: "Sign In" }).click();
+      await this.page.locator("div#drawerModal button", { hasText: "Sign In" }).click();
       // check login response
       const authResp = await authPromise;
       const authPayload = await authResp.json();
