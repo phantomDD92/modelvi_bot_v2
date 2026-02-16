@@ -40,9 +40,9 @@ let config: IBotConfig = {
   console_log: process.env.CONSOLE_LOG == "true",
   channel_notify: process.env.DISCORD_WEBHOOK_NOTIFY,
   debug: opts.debug,
-  force: opts.force,
+  // force: opts.force,
   // debug: true,
-  // force: true,
+  force: true,
 };
 
 const logger: Logger = new Logger(config);
