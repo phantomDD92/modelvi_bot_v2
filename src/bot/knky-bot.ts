@@ -90,7 +90,7 @@ export class KnKyBot extends PostBot {
       return true;
     } catch (error: any) {
       if (error instanceof SessionTimeoutError) {
-        await this.browser.refreshToken(this.settings);
+        await this.browser.refreshToken();
         this.logger.info("refresh token");
         return true;
       }
@@ -152,7 +152,7 @@ export class KnKyBot extends PostBot {
       return true;
     } catch (error: any) {
       if (error instanceof SessionTimeoutError) {
-        await this.browser.refreshToken(this.settings);
+        await this.browser.refreshToken();
         this.logger.info("refresh token");
         return true;
       }
@@ -249,7 +249,7 @@ export class KnKyBot extends PostBot {
       return true;
     } catch (error) {
       if (error instanceof SessionTimeoutError) {
-        await this.browser.refreshToken(this.settings);
+        await this.browser.refreshToken();
         this.logger.info("refresh token");
         return true;
       }
@@ -258,4 +258,27 @@ export class KnKyBot extends PostBot {
     }
   }
 
+  // protected needTest(): boolean {
+  //   return true;
+  // }
+
+  protected async doTest(): Promise<boolean> {
+    await this.browser.waitForTimeout(300000);
+    for (let i = 0; i < 2; i++) {
+      try {
+        await this.browser.getVaults();
+        return true;
+      } catch (error: any) {
+        console.error("### : ", error)
+        if (error instanceof SessionTimeoutError) {
+          await this.browser.refreshToken();
+          continue;
+        }
+        if (i === 1)
+          throw error;
+        await this.browser.waitForTimeout(1000);
+      }
+    }
+    return false;
+  }
 }
