@@ -3,23 +3,19 @@ import os from "os";
 import path from "path";
 import http from "http";
 import https from "https";
+import axios from "axios";
 import * as twoFactor from "node-2fa";
 
 import { Browser, BrowserContext, Page } from "playwright";
-import {
-  IAccountID,
-  IAccountSettings,
-  IBotConfig,
-  IProxy,
-} from "../types/interface";
 import { firefox, chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import RecaptchaPlugin from "puppeteer-extra-plugin-recaptcha";
-import { Logger } from "../utils/logger";
 import { Solver } from "2captcha-ts";
-import { BotError, ProxyError } from "../utils/error";
+
 import { Platform } from "../types/constant";
-import axios from "axios";
+import { IAccountID, IAccountSettings, IBotConfig, IProxy, } from "../types/interface";
+import { Logger } from "../utils/logger";
+import { BotError, ProxyError } from "../utils/error";
 
 export abstract class BaseBrowser {
   protected browser!: Browser;
@@ -28,9 +24,7 @@ export abstract class BaseBrowser {
   protected config: IBotConfig;
   protected logger: Logger;
   protected proxy!: IProxy;
-  protected headers!: {
-    [key: string]: string;
-  };
+  protected headers!: { [key: string]: string; };
   protected solver: Solver;
 
   constructor(config: IBotConfig, logger: Logger) {
@@ -45,9 +39,7 @@ export abstract class BaseBrowser {
     // install recaptcha, stealth plugin for headless browser
     // set proxy
     this.proxy = proxy;
-
     // create browser, context, page
-
     switch (this.config.platform) {
       case Platform.KNKY:
       case Platform.MALOUM:
@@ -60,10 +52,6 @@ export abstract class BaseBrowser {
             solveScoreBased: true,
           }),
         );
-        // Only use StealthPlugin for KNKY, not MALOUM (causes issues)
-        // if (this.config.platform === Platform.KNKY) {
-        //   firefox.use(StealthPlugin());
-        // }
         this.browser = await firefox.launch({
           headless: !this.config.debug,
           proxy,
@@ -72,6 +60,11 @@ export abstract class BaseBrowser {
             useAutomationExtension: false,
             "privacy.resistFingerprinting": false,
           },
+        });
+        this.context = await this.browser.newContext({
+          serviceWorkers: "block",
+          screen: { width: 1200, height: 800 },
+          userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0"
         });
         break;
 
@@ -96,13 +89,13 @@ export abstract class BaseBrowser {
             headless: !this.config.debug,
             proxy,
           });
+        this.context = await this.browser.newContext({
+          serviceWorkers: "block",
+          screen: { width: 1200, height: 800 },
+        });
         break;
     }
 
-    this.context = await this.browser.newContext({
-      serviceWorkers: "block",
-      screen: { width: 1200, height: 800 },
-    });
     this.page = await this.context.newPage();
     // set default timeout
     this.page.setDefaultTimeout(120000);
