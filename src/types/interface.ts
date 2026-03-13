@@ -72,6 +72,9 @@ export interface IAccountParams {
   followNextTime?: number,
   likeNextTime?: number,
   likeLimit?: number,
+
+  autoDelete?: boolean,
+  maxDeletePerCycle?: number,
 }
 
 export interface IAccountSettings {
@@ -139,6 +142,8 @@ export interface IContent {
   f2fStoryType?: number,
   description?: string,
   postTags: string[],
+  postType: any,
+  price?: number,
 }
 
 export interface ISchedulePost {

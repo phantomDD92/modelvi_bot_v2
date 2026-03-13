@@ -58,14 +58,17 @@ export class FanslyBot extends PostBot {
   }
 
   private async removePosts(): Promise<string[]> {
+    // Check if auto-delete is enabled
+    if (this.settings.params?.autoDelete === false) return [];
     try {
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       const postRemains = this.settings.params?.postRemains || [];
       const postIds = await this.browser.getSelfPosts();
       const postIdsPublished = postIds.filter(postId => postRemains.includes(postId));
       this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postIdsPublished.length}`);
       const deleteIds = [];
-      while (postIdsPublished.length > postCount) {
+      while (postIdsPublished.length > postCount && deleteIds.length < maxDelete) {
         const postIdDeleting = postIdsPublished.pop()
         if (postIdDeleting) {
           await this.browser.deletePost(postIdDeleting);
@@ -116,7 +119,9 @@ export class FanslyBot extends PostBot {
   }
 
   private async createPublishPost(content: IContent, mediaId: string, previewId: string | undefined) {
-    const contentId = await this.browser.createContent(mediaId, PostType.FREE, 0, previewId);
+    const postType = (content.postType === 'PAID') ? PostType.PAID : (content.postType === 'FANS' || content.postType === 'FAN') ? PostType.FANS : PostType.FREE;
+    const postPrice = content.price || 0;
+    const contentId = await this.browser.createContent(mediaId, postType, postPrice, previewId);
     const postId = await this.browser.publishPost(content.title, content.postTags, contentId);
     return postId;
   }
@@ -310,6 +315,49 @@ export class FanslyBot extends PostBot {
       return false;
     }
   }
+
+  protected async doComment() {
+        try {
+            const params = await this.service.updateCommentSetting();
+            if (params.comments.length === 0)
+                return true;
+            await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
+            const posts = await this.browser.getPosts();
+            let success = false;
+            for (const post of posts) {
+                if (post.accountId === this.browser.profile.id)
+                    continue;
+                if (params.block_users.includes(post.accountId))
+                    continue;
+                try {
+                    await this.browser.likePost(post.id);
+                }
+                catch (e) { }
+                await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 3000) + 2000));
+                const comment = this.pickup(params.comments);
+                await this.browser.commentPost(post.id, comment);
+                await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
+                await this.service.createLog({
+                    success: true,
+                    action: ActionType.COMMENT,
+                    message: `comment post`,
+                    target: post.id,
+                });
+                success = true;
+                break;
+            }
+            return true;
+        }
+        catch (error) {
+            this.logger.notifyError(error);
+            await this.service.createLog({
+                success: false,
+                action: ActionType.COMMENT,
+                message: "failed to comment",
+            });
+            return false;
+        }
+    }
 
   protected needTest(): boolean {
     return false;

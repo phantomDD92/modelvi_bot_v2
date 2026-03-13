@@ -26,7 +26,7 @@ declare global {
 }
 
 export class FanvueBrowser extends BaseBrowser {
-  protected profile!: IFanvueProfile;
+  public profile!: IFanvueProfile;
   // constructor
   constructor(config: IBotConfig, logger: Logger) {
     super(config, logger);
@@ -662,7 +662,15 @@ export class FanvueBrowser extends BaseBrowser {
       // Navigate to the creator's home/feed page
       await this.page.goto("https://www.fanvue.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
       await this.page.waitForTimeout(3000);
-
+      // Click Feed tab if visible (some accounts default to Dashboard which has no compose)
+      try {
+        const feedTab = this.page.locator('button:has-text("Feed"), a:has-text("Feed"), [role="tab"]:has-text("Feed")').first();
+        if (await feedTab.isVisible({ timeout: 2000 })) {
+          await feedTab.click();
+          this.logger.info('[createPost] Clicked Feed tab');
+          await this.page.waitForTimeout(2000);
+        }
+      } catch (e) { }
       // Set up interceptor to capture the actual createPost API call
       const createPostPromise = this.page.waitForResponse(
         response => response.url().includes('post.createPost') && response.request().method() === 'POST',
@@ -867,13 +875,24 @@ export class FanvueBrowser extends BaseBrowser {
       // Step 5: Close vault dialog if still open
       await this.page.waitForTimeout(1000);
       try {
-        const closeBtn = this.page.locator('button[aria-label="Close dialog"], button[aria-label="Close"]').first();
+        const closeBtn = this.page.locator('button[aria-label="Close dialog"], button[aria-label="Close"], [role="dialog"] button:first-child, button:near(:text("Vault"))').first();
         if (await closeBtn.isVisible({ timeout: 2000 })) {
           await closeBtn.click();
-          this.logger.info(`[createPost] Closed vault dialog`);
+          this.logger.info('[createPost] Closed vault dialog via button');
           await this.page.waitForTimeout(1500);
         }
-      } catch (e) { }
+      }
+      catch (e) { }
+      // Press Escape to ensure any open dialogs are closed
+      try {
+        const dialog = this.page.locator('[role="dialog"]').first();
+        if (await dialog.isVisible({ timeout: 1000 })) {
+          await this.page.keyboard.press('Escape');
+          this.logger.info('[createPost] Pressed Escape to close dialog');
+          await this.page.waitForTimeout(1500);
+        }
+      }
+      catch (e) { }
 
       // Step 6: Click "Create post" button to submit
       let posted = false;
@@ -1014,6 +1033,98 @@ export class FanvueBrowser extends BaseBrowser {
         error: error.message,
         stack: error.stack,
       });
+    }
+  }
+
+  public async getFeed() {
+    try {
+      const params = {
+        input: JSON.stringify({
+          "json": {
+            "cursor": null,
+            "direction": "forward"
+          },
+          "meta": {
+            "values": {
+              "cursor": ["undefined"]
+            }
+          }
+        })
+      };
+      const resp = await this.page.request.get("https://www.fanvue.com/trpc/post.getFeed", {
+        headers: this.headers,
+        params
+      });
+      if (!resp.ok())
+        throw new BotError("get feed failed", {
+          where: "FanvueBrowser::getFeed",
+          method: "GET",
+          endpoint: "https://www.fanvue.com/trpc/post.getFeed",
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      const respData = await resp.json();
+      return respData.result?.data?.json?.items || [];
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("get feed failed", {
+        where: "FanvueBrowser::getFeed",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async commentPost(postId: string, comment: string) {
+    try {
+      const batchPayload = { "0": { postId: postId, text: comment } };
+      const fetchResult = await this.page.evaluate(async (payload) => {
+        const response = await fetch("https://www.fanvue.com/trpc/post.createComment?batch=1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        return { status: response.status, statusText: response.statusText, body: await response.text() };
+      }, batchPayload);
+      if (fetchResult.status !== 200) {
+        throw new BotError("comment post failed", {
+          where: "FanvueBrowser::commentPost",
+          status: fetchResult.statusText,
+          response: fetchResult.body
+        });
+      }
+      return JSON.parse(fetchResult.body);
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("comment post failed", { where: "FanvueBrowser::commentPost", error: error.message, stack: error.stack });
+    }
+  }
+
+  public async likePost(postId: string) {
+    try {
+      const batchPayload = { "0": { postId: postId } };
+      const fetchResult = await this.page.evaluate(async (payload) => {
+        const response = await fetch("https://www.fanvue.com/trpc/post.likePost?batch=1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        return { status: response.status, statusText: response.statusText, body: await response.text() };
+      }, batchPayload);
+      if (fetchResult.status !== 200) {
+        throw new BotError("like post failed", {
+          where: "FanvueBrowser::likePost",
+          status: fetchResult.statusText,
+          response: fetchResult.body
+        });
+      }
+      return JSON.parse(fetchResult.body);
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("like post failed", { where: "FanvueBrowser::likePost", error: error.message, stack: error.stack });
     }
   }
 }

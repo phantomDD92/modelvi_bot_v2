@@ -5,7 +5,7 @@ import { IBotConfig, IContent, IMedia, ISchedulePost, IScheduleResult } from "..
 import { Logger } from "../utils/logger";
 import { PostBot } from "./post-bot";
 import { BotError, SessionTimeoutError } from '../utils/error';
-import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, ScheduleStatus } from "../types/constant";
+import { ActionType, DEFAULT_LIVING_POSTS, PostResultType, PostType, ScheduleStatus } from "../types/constant";
 import { isNormalMedia } from "../utils/helper";
 
 export class FourBasedBot extends PostBot {
@@ -52,15 +52,18 @@ export class FourBasedBot extends PostBot {
   }
 
   private async deleteOldPosts() {
+    // Check if auto-delete is enabled
+    if (this.settings.params?.autoDelete === false) return [];
     const deleteIds = [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       const postRemains = this.settings.params?.postRemains || [];
       const postIds: string[] = await this.browser.getSelfPosts();
       const postsPublished = postIds.filter(postId => postRemains.includes(postId));
       this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`);
-      while (postsPublished.length > postCount) {
+      while (postsPublished.length > postCount && deleteIds.length < maxDelete) {
         const postDeleting = postsPublished.pop()
         if (postDeleting) {
           await this.browser.deletePost(postDeleting);
@@ -126,7 +129,9 @@ export class FourBasedBot extends PostBot {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      postId = await this.browser.schedulePost(moment().add(1, "minute").toDate(), content.title, [mediaId]);
+      const _postType = (content.postType === 'PAID') ? PostType.PAID : (content.postType === 'FANS' || content.postType === 'FAN') ? PostType.FANS : PostType.FREE;
+      const _postPrice = _postType === PostType.PAID ? (content.price || 0) : 0;
+      postId = await this.browser.schedulePost(moment().add(1, "minute").toDate(), content.title, [mediaId], _postType, _postPrice);
       if (postId) {
         await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId });
       }
@@ -243,6 +248,49 @@ export class FourBasedBot extends PostBot {
     }
   }
 
+  protected async doComment() {
+    try {
+      const params = await this.service.updateCommentSetting();
+      if (params.comments.length === 0)
+        return true;
+      await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
+      const posts = await this.browser.getFeed();
+      let success = false;
+      for (const post of posts) {
+        if (params.block_users.includes(post.creatorName))
+          continue;
+        try {
+          await this.browser.likePost(post._id);
+        }
+        catch (e) { }
+        await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 3000) + 2000));
+        const comment = this.pickup(params.comments);
+        await this.browser.commentPost(post._id, comment);
+        await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
+        await this.service.createLog({
+          success: true,
+          action: ActionType.COMMENT,
+          message: `comment ${post.creatorName}'s post`,
+          target: post._id,
+        });
+        success = true;
+        break;
+      }
+      return true;
+    }
+    catch (error) {
+      this.logger.notifyError(error);
+      await this.service.createLog({
+        success: false,
+        action: ActionType.COMMENT,
+        message: "failed to comment",
+      });
+      if (error instanceof SessionTimeoutError)
+        await this.browser.refreshSession();
+      return false;
+    }
+  }
+  
   protected needTest(): boolean {
     return false
   }

@@ -53,9 +53,12 @@ export class F2fBot extends PostBot {
   }
 
   private async removePosts(): Promise<string[]> {
+    // Check if auto-delete is enabled
+    if (this.settings.params?.autoDelete === false) return [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       const postRemains = this.settings.params?.postRemains || [];
       const postIds: string[] = await this.browser.getSelfPosts();
       const postsPublished = postIds.filter((postId) =>
@@ -65,7 +68,7 @@ export class F2fBot extends PostBot {
         `submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`,
       );
       const deleteIds = [];
-      while (postsPublished.length > postCount) {
+      while (postsPublished.length > postCount && deleteIds.length < maxDelete) {
         const postDeleting = postsPublished.pop();
         if (postDeleting) {
           await this.browser.deletePost(postDeleting);

@@ -399,12 +399,15 @@ export class LoyalFansBrowser extends BaseBrowser {
     }
   }
 
+  private removeBannedTags(tags: string[]): string[] {
+    return tags.filter(tag => tag != "outdoor");
+  }
+
   public async schedulePost(scheduledAt: Date, title: string, tags: string[], mediaIds: string[], postType?: number, postPrice?: number) {
     try {
       const labelTags = ["creator", "horny", "sexy"];
       let params;
-      let postTags = tags.filter(tag => tag != "outdoor");
-      console.log("#### : ", postTags);
+      let postTags = this.removeBannedTags(tags);
       if (postTags.length > 0 && labelTags.includes(postTags[postTags.length - 1])) {
         postTags = postTags
       } else {
@@ -505,5 +508,48 @@ export class LoyalFansBrowser extends BaseBrowser {
       })
     }
     return respData;
+  }
+
+  public async commentPost(postId: string, comment: string) {
+    try {
+      const resp = await this.page.request.post("https://www.loyalfans.com/api/v1/post/create-comment?ngsw-bypass=true", {
+        headers: this.headers,
+        data: { post_id: postId, body: comment }
+      });
+      return await this.getResponseData(resp, { action: "comment post", function: "commentPost", method: "POST" });
+    }
+    catch (error: any) {
+      if (error instanceof SessionTimeoutError) {
+        await this.refreshSession();
+        const resp = await this.page.request.post("https://www.loyalfans.com/api/v1/post/create-comment?ngsw-bypass=true", {
+          headers: this.headers,
+          data: { post_id: postId, body: comment }
+        });
+        return await this.getResponseData(resp, { action: "comment post", function: "commentPost", method: "POST" });
+      }
+      if (error instanceof BotError) throw error;
+      throw new BotError("comment post failed", { where: "LoyalFansBrowser::commentPost", error: error.message, stack: error.stack });
+    }
+  }
+  public async likePost(postId: string) {
+    try {
+      const resp = await this.page.request.post("https://www.loyalfans.com/api/v1/post/like?ngsw-bypass=true", {
+        headers: this.headers,
+        data: { post_id: postId }
+      });
+      return await this.getResponseData(resp, { action: "like post", function: "likePost", method: "POST" });
+    }
+    catch (error: any) {
+      if (error instanceof SessionTimeoutError) {
+        await this.refreshSession();
+        const resp = await this.page.request.post("https://www.loyalfans.com/api/v1/post/like?ngsw-bypass=true", {
+          headers: this.headers,
+          data: { post_id: postId }
+        });
+        return await this.getResponseData(resp, { action: "like post", function: "likePost", method: "POST" });
+      }
+      if (error instanceof BotError) throw error;
+      throw new BotError("like post failed", { where: "LoyalFansBrowser::likePost", error: error.message, stack: error.stack });
+    }
   }
 }

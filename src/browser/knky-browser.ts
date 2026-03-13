@@ -592,6 +592,16 @@ export class KnkyBrowser extends BaseBrowser {
       await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']",).waitFor();
       await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']",).first().click();
 
+      // Select post type based on content.postType
+      const resolvedType = (content.postType === 'PAID') ? 3 : (content.postType === 'FANS' || content.postType === 'FAN') ? 2 : 1;
+      if (resolvedType === 2) {
+        await this.page
+          .locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-4']").first().click();
+      } else {
+        await this.page
+          .locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']").first().click();
+      }
+
       // set content
       const tagsStr = content.postTags.map((tag) => `#${tag}`).join(" ");
       await this.page.locator("div.create-post-content div.caption-content textarea").first().fill(`${content.title}\n${tagsStr}`);

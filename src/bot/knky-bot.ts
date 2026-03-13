@@ -41,13 +41,16 @@ export class KnKyBot extends PostBot {
   }
 
   private async deleteOldPosts() {
+    // Check if auto-delete is enabled
+    if (this.settings.params?.autoDelete === false) return [];
     const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+    const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
     const postRemains = this.settings.params?.postRemains || [];
     const posts = await this.browser.getSelfPosts();
     const postsPublished = posts.filter(post => postRemains.includes(post._id));
     this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${posts.length}, published posts: ${postsPublished.length}`);
     const deleteIds = [];
-    while (postsPublished.length > postCount) {
+    while (postsPublished.length > postCount && deleteIds.length < maxDelete) {
       const postDeleting = postsPublished.pop()
       if (postDeleting) {
         deleteIds.push(postDeleting._id)
@@ -103,6 +106,12 @@ export class KnKyBot extends PostBot {
 
   // bot action for posting
   protected async doStory(): Promise<boolean> {
+    // Exponential backoff for stories too
+    // if (this.errorCount > 0) {
+    //   const _backoff = Math.min(this.errorCount * 120000, 600000);
+    //   this.logger.warn(`Story backoff: waiting ${Math.round(_backoff / 1000)}s (${this.errorCount} errors)`);
+    //   await new Promise(r => setTimeout(r, _backoff));
+    // }
     const contents = this.settings.params?.contents || [];
     let storyIndex = this.settings.params?.storyIndex || 0;
     try {

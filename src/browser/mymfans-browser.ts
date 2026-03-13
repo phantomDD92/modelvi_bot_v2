@@ -92,6 +92,7 @@ export class MymFansBrowser extends BaseBrowser {
       // set title
       await this.page.locator("textarea[data-testid='post-creation-form-setup-caption']").first().fill(title);
       await this.page.locator("input[data-testid='post-creation-form-visibility-public-radio']").first().setChecked(true);
+      // await this.page.locator("input[data-testid='post-creation-form-visibility-private-radio']").first().setChecked(true);
       await this.page.locator("input[data-testid='upload-input']").first().setInputFiles(mediaPath);
 
       // wait media upload for 5 minutes
@@ -189,9 +190,9 @@ export class MymFansBrowser extends BaseBrowser {
       await this.page.locator("textarea[data-testid='post-creation-form-setup-caption']").first().fill(title);
       // set public
       if (!type || type == PostType.FREE)
-        await this.page.locator("input[data-testid='post-creation-form-visibility-private-radio']").first().setChecked(true);
-      else
         await this.page.locator("input[data-testid='post-creation-form-visibility-public-radio']").first().setChecked(true);
+      else
+        await this.page.locator("input[data-testid='post-creation-form-visibility-private-radio']").first().setChecked(true);
       // set image
       await this.page.locator("input[data-testid='upload-input']").first().setInputFiles(image);
 
@@ -410,6 +411,52 @@ export class MymFansBrowser extends BaseBrowser {
         error: error.message,
         stack: error.stack
       })
+    }
+  }
+
+  public async commentPost(postId: string, comment: string) {
+    try {
+      const resp = await this.page.request.post(`https://api.mym.fans/posts/${postId}/comment`, {
+        data: { content: comment }
+      });
+      if (!resp.ok()) {
+        throw new BotError("comment post failed", {
+          where: "MymFansBrowser::commentPost",
+          status: resp.statusText(),
+          response: await resp.text()
+        });
+      }
+      return await resp.json();
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("comment post failed", {
+        where: "MymFansBrowser::commentPost",
+        error: error.message,
+        stack: error.stack
+      });
+    }
+  }
+
+  public async likePost(postId: string) {
+    try {
+      const resp = await this.page.request.post(`https://api.mym.fans/posts/${postId}/like`);
+      if (!resp.ok()) {
+        throw new BotError("like post failed", {
+          where: "MymFansBrowser::likePost",
+          status: resp.statusText(),
+          response: await resp.text()
+        });
+      }
+      return await resp.json();
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("like post failed", {
+        where: "MymFansBrowser::likePost",
+        error: error.message,
+        stack: error.stack
+      });
     }
   }
 }

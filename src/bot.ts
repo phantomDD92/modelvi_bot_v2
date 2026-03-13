@@ -48,6 +48,11 @@ let config: IBotConfig = {
 const logger: Logger = new Logger(config);
 
 process.on("uncaughtException", (err) => {
+  const msg = String(err);
+  if (msg.includes("Target page, context or browser has been closed") || msg.includes("Browser closed")) {
+    logger.warn("browser context lost (non-fatal): " + msg);
+    return;
+  }
   logger.notifyError(err);
   logger.warn(`bot rejected : ${err}`);
   process.exit();
@@ -55,9 +60,13 @@ process.on("uncaughtException", (err) => {
 
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (reason, promise) => {
-  // const err = reason instanceof Error ? reason : new Error(String(reason));
-  logger.notifyError(new Error(String(reason)));
-  logger.warn(`bot rejected : ${reason}`);
+  const msg = String(reason);
+  if (msg.includes("Target page, context or browser has been closed") || msg.includes("Browser closed")) {
+    logger.warn("browser context lost (non-fatal): " + msg);
+    return;
+  }
+  logger.notifyError(new Error(msg));
+  logger.warn("bot rejected : " + reason);
   process.exit();
 });
 
