@@ -403,9 +403,10 @@ export class LoyalFansBrowser extends BaseBrowser {
     try {
       const labelTags = ["creator", "horny", "sexy"];
       let params;
-      let postTags = tags
-      if (tags.length > 0 && labelTags.includes(tags[tags.length - 1])) {
-        postTags = tags
+      let postTags = tags.filter(tag => tag != "outdoor");
+      console.log("#### : ", postTags);
+      if (postTags.length > 0 && labelTags.includes(postTags[postTags.length - 1])) {
+        postTags = postTags
       } else {
         postTags.push(labelTags[Math.floor(Math.random() * labelTags.length)]);
       }
@@ -427,7 +428,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         case PostType.FANS:
           params = {
             title,
-            content: tags.map(tag => `#${tag}`).join(" "),
+            content: postTags.map(tag => `#${tag}`).join(" "),
             images: mediaIds.map(mediaId => ({ type: "MC", value: mediaId })),
             labels: [],
             privacy_coverage: "all",
@@ -440,7 +441,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         default:
           params = {
             title,
-            content: tags.map(tag => `#${tag}`).join(" "),
+            content: postTags.map(tag => `#${tag}`).join(" "),
             images: mediaIds.map(mediaId => ({ type: "MC", value: mediaId })),
             labels: [],
             privacy_coverage: "all",
