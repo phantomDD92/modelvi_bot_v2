@@ -40,9 +40,9 @@ export class FancentroBrowser extends BaseBrowser {
   public async afterHome(): Promise<void> {
     try {
       // wait for a age gate modal
-      await this.page.locator("div.mui-style-17j74fr").waitFor();
+      await this.page.locator("button", {hasText: "I AM 18 OR OLDER - ENTER"});
       // close modal
-      await this.page.locator("div.mui-style-17j74fr button").first().click();
+      await this.page.locator("button", {hasText: "I AM 18 OR OLDER - ENTER"}).first().click();
       this.logger.info("close age gate modal");
     } catch (error: any) {
     }
@@ -101,14 +101,19 @@ export class FancentroBrowser extends BaseBrowser {
   }
 
   private async solveCaptcha() {
-    try {
-      await this.page.solveRecaptchas();
-    } catch (error: any) {
-      throw new BotError("solve captcha failed", {
-        where: "FancentroBrowser::solveCaptcha",
-        error: error.message,
-      })
+    var lastError;
+    for (var i = 0; i < 3; i++) {
+      try {
+        await this.page.solveRecaptchas();
+        return;
+      } catch (error: any) {
+        lastError = error;
+      }
     }
+    throw new BotError("solve captcha failed", {
+      where: "FancentroBrowser::solveCaptcha",
+      error: lastError.message,
+    });
   }
 
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
@@ -116,7 +121,7 @@ export class FancentroBrowser extends BaseBrowser {
       // goto login page
       await this.page.locator("header button.mui-style-ctfnfu").waitFor();
       await this.page.locator("header button.mui-style-ctfnfu").click();
-      await this.page.locator("form button.mui-style-qrm5bi").click();
+      await this.page.locator("form button", {hasText: "Log in with email"}).click();
 
       // await this.page.waitForLoadState('load');
       await this.page.locator('input[name="email"]').waitFor();
@@ -129,6 +134,7 @@ export class FancentroBrowser extends BaseBrowser {
       // click login button
       await this.page.waitForTimeout(500);
       this.logger.info("try to login");
+      await this.solveCaptcha();
       let authResult = await this.getAuthResult();
       if (authResult == "captcha") {
         await this.solveCaptcha();
@@ -729,6 +735,7 @@ export class FancentroBrowser extends BaseBrowser {
       throw new BotError("comment post failed", { where: "FancentroBrowser::commentPost", error: error.message, stack: error.stack });
     }
   }
+  
   async likePost(postId: string) {
     try {
       const resp = await this.page.request.post(`https://fancentro.mainhub.com/posts/${postId}/like`, {
