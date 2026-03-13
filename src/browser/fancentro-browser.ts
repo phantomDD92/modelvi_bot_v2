@@ -40,9 +40,9 @@ export class FancentroBrowser extends BaseBrowser {
   public async afterHome(): Promise<void> {
     try {
       // wait for a age gate modal
-      await this.page.locator("button", {hasText: "I AM 18 OR OLDER - ENTER"});
+      await this.page.locator("button", { hasText: "I AM 18 OR OLDER - ENTER" });
       // close modal
-      await this.page.locator("button", {hasText: "I AM 18 OR OLDER - ENTER"}).first().click();
+      await this.page.locator("button", { hasText: "I AM 18 OR OLDER - ENTER" }).first().click();
       this.logger.info("close age gate modal");
     } catch (error: any) {
     }
@@ -62,7 +62,6 @@ export class FancentroBrowser extends BaseBrowser {
         where: "FancentroBrowser::getAuthResult",
         method: "POST",
         endpoint: "https://fancentro.com/api/v1/api/authenticate",
-        params: authResp.request().postData(),
         status: authResp.statusText(),
         response: await authResp.text(),
       })
@@ -121,7 +120,7 @@ export class FancentroBrowser extends BaseBrowser {
       // goto login page
       await this.page.locator("header button.mui-style-ctfnfu").waitFor();
       await this.page.locator("header button.mui-style-ctfnfu").click();
-      await this.page.locator("form button", {hasText: "Log in with email"}).click();
+      await this.page.locator("form button", { hasText: "Log in with email" }).click();
 
       // await this.page.waitForLoadState('load');
       await this.page.locator('input[name="email"]').waitFor();
@@ -439,7 +438,6 @@ export class FancentroBrowser extends BaseBrowser {
             where: "FancentroBrowser::getPosts",
             method: "GET",
             endpoint: `https://fancentro.mainhub.com/posts/find`,
-            params,
             status: resp.statusText(),
             response: await resp.text(),
           });
@@ -479,7 +477,6 @@ export class FancentroBrowser extends BaseBrowser {
         where: "FancentroBrowser::deletePost",
         method: "POST",
         endpoint: `https://fancentro.mainhub.com/posts/${postId}/delete`,
-        params: { token: this.token },
         status: resp.statusText(),
         response: await resp.text(),
       })
@@ -654,51 +651,52 @@ export class FancentroBrowser extends BaseBrowser {
     try {
       await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
       // Try API first: get feed posts via mainhub API
-      try {
-        const resp = await this.page.request.get("https://fancentro.mainhub.com/posts/feed", {
-          headers: this.headers,
-          params: { token: this.token, limit: 20, offset: 0 }
-        });
-        if (resp.ok()) {
-          const data = await resp.json();
-          const posts = Array.isArray(data) ? data : (data.posts || data.data || data.items || []);
-          if (posts.length > 0) {
-            return posts.slice(0, 10).map((p: any) => ({
-              id: p.id || p._id || p.post_id,
-              user: p.user || p.creator || p.author || null
-            }));
-          }
-        }
-      } catch (apiErr) {
-        // API failed, try DOM scraping
-      }
-      // Fallback: scrape /feed page (authenticated)
-      await this.page.goto("https://fancentro.com/feed", { timeout: 30000, waitUntil: "domcontentloaded" });
-      await new Promise(resolve => setTimeout(resolve, 4000));
-      const posts = await this.page.evaluate(() => {
-        const items: any[] = [];
-        const selectors = ["a[href*='/post/']", "a[href*='/p/']", "[data-post-id]", "article a[href]"];
-        for (const sel of selectors) {
-          document.querySelectorAll(sel).forEach((el: any) => {
-            const href = el.href || el.getAttribute("href") || "";
-            const postIdAttr = el.getAttribute("data-post-id");
-            if (postIdAttr) {
-              items.push({ id: postIdAttr });
-            } else {
-              const match = href.match(/\/(?:post|p)\/([\w\d-]+)/);
-              if (match) items.push({ id: match[1] });
-            }
-          });
-          if (items.length > 0) break;
-        }
-        const seen = new Set();
-        return items.filter(p => {
-          if (seen.has(p.id)) return false;
-          seen.add(p.id);
-          return true;
-        });
+      const resp = await this.page.request.get("https://fancentro.mainhub.com/posts/feed", {
+        headers: this.headers,
+        params: { token: this.token, limit: 20, offset: 0 }
       });
-      return posts.slice(0, 10);
+      if (!resp.ok())
+        throw new BotError("get feed failed", {
+          where: "FancentroBrowser::getFeed",
+          method: "GET",
+          endpoint: "https://fancentro.mainhub.com/posts/feed",
+          status: resp.statusText(),
+          response: await resp.text()
+        })
+      const respData = await resp.json();
+      const posts = Array.isArray(respData) ? respData : (respData.posts || respData.data || respData.items || []);
+      if (posts.length > 0) {
+        return posts.slice(0, 10).map((p: any) => ({
+          id: p.id || p._id || p.post_id,
+          user: p.user || p.creator || p.author || null
+        }));
+      }
+      // await this.page.goto("https://fancentro.com/feed", { timeout: 30000, waitUntil: "domcontentloaded" });
+      // await new Promise(resolve => setTimeout(resolve, 4000));
+      // const posts = await this.page.evaluate(() => {
+      //   const items: any[] = [];
+      //   const selectors = ["a[href*='/post/']", "a[href*='/p/']", "[data-post-id]", "article a[href]"];
+      //   for (const sel of selectors) {
+      //     document.querySelectorAll(sel).forEach((el: any) => {
+      //       const href = el.href || el.getAttribute("href") || "";
+      //       const postIdAttr = el.getAttribute("data-post-id");
+      //       if (postIdAttr) {
+      //         items.push({ id: postIdAttr });
+      //       } else {
+      //         const match = href.match(/\/(?:post|p)\/([\w\d-]+)/);
+      //         if (match) items.push({ id: match[1] });
+      //       }
+      //     });
+      //     if (items.length > 0) break;
+      //   }
+      //   const seen = new Set();
+      //   return items.filter(p => {
+      //     if (seen.has(p.id)) return false;
+      //     seen.add(p.id);
+      //     return true;
+      //   });
+      // });
+      // return posts.slice(0, 10);
     }
     catch (error: any) {
       if (error instanceof BotError)
@@ -708,7 +706,6 @@ export class FancentroBrowser extends BaseBrowser {
       throw new BotError("get feed failed", {
         where: "FancentroBrowser::getFeed",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -732,11 +729,14 @@ export class FancentroBrowser extends BaseBrowser {
     }
     catch (error: any) {
       if (error instanceof BotError) throw error;
-      throw new BotError("comment post failed", { where: "FancentroBrowser::commentPost", error: error.message, stack: error.stack });
+      throw new BotError("comment post failed", {
+        where: "FancentroBrowser::commentPost",
+        error: error.message
+      });
     }
   }
-  
-  async likePost(postId: string) {
+
+  public async likePost(postId: string) {
     try {
       const resp = await this.page.request.post(`https://fancentro.mainhub.com/posts/${postId}/like`, {
         headers: this.headers,
@@ -755,7 +755,10 @@ export class FancentroBrowser extends BaseBrowser {
     }
     catch (error: any) {
       if (error instanceof BotError) throw error;
-      throw new BotError("like post failed", { where: "FancentroBrowser::likePost", error: error.message, stack: error.stack });
+      throw new BotError("like post failed", {
+        where: "FancentroBrowser::likePost",
+        error: error.message,
+      });
     }
   }
 }

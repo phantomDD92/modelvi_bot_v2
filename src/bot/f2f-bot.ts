@@ -240,27 +240,18 @@ export class F2fBot extends PostBot {
   }
 
   protected async doComment(): Promise<boolean> {
-    // get comment
     try {
       const params: ICommentParams = await this.service.updateCommentSetting();
       if (params.comments.length === 0) return true;
       const explores = await this.browser.getExplores();
       let success = false;
       for (var explore of explores) {
-        if (
-          explore.creator != this.config.alias &&
-          !params.block_users.includes(explore.creator)
-        ) {
+        if (explore.creator != this.config.alias && !params.block_users.includes(explore.creator)) {
           success = await this.browser.followPost(explore);
           if (success) {
             const comment = this.pickup(params.comments);
             await this.browser.commentPost(explore, comment);
-            await this.service.createLog({
-              success: true,
-              action: ActionType.COMMENT,
-              message: `comment ${explore.creator}'s post`,
-              target: explore.uuid,
-            });
+            await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `comment ${explore.creator}'s post`, target: explore.uuid, });
             break;
           }
         }
@@ -268,11 +259,7 @@ export class F2fBot extends PostBot {
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.createLog({
-        success: false,
-        action: ActionType.COMMENT,
-        message: `failed to comment a post`,
-      });
+      await this.service.createLog({ success: false, action: ActionType.COMMENT, message: `failed to comment a post`, });
       return false;
     }
   }
