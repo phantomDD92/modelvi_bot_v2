@@ -3,7 +3,7 @@ import { BaseBrowser } from "./base-browser";
 import { PostType } from "../types/constant";
 import { IFancentroLabel, IFancentroPost, IFancentroProfile, IFancentroVaultItem } from "../types/fancentro";
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
-import { AuthError, BotError, ProxyError } from "../utils/error";
+import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { Logger } from "../utils/logger";
 
 export class FancentroBrowser extends BaseBrowser {
@@ -406,7 +406,7 @@ export class FancentroBrowser extends BaseBrowser {
       throw new BotError("get vault failed", {
         where: "FancentroBrowser::getVault",
         message: error.message
-        
+
       })
     }
   }
@@ -458,7 +458,7 @@ export class FancentroBrowser extends BaseBrowser {
       throw new BotError("get posts failed", {
         where: "FancentroBrowser::getPosts",
         message: error.message
-        
+
       })
     }
   }
@@ -483,7 +483,7 @@ export class FancentroBrowser extends BaseBrowser {
       throw new BotError("delete post failed", {
         where: "FancentroBrowser::deletePost",
         message: error.message
-        
+
       })
     }
   }
@@ -641,6 +641,114 @@ export class FancentroBrowser extends BaseBrowser {
         where: "FancentroBrowser::getMonthlyEarnings",
         message: error.message
       });
+    }
+  }
+
+  public async getFeed() {
+    try {
+      await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
+      // Try API first: get feed posts via mainhub API
+      try {
+        const resp = await this.page.request.get("https://fancentro.mainhub.com/posts/feed", {
+          headers: this.headers,
+          params: { token: this.token, limit: 20, offset: 0 }
+        });
+        if (resp.ok()) {
+          const data = await resp.json();
+          const posts = Array.isArray(data) ? data : (data.posts || data.data || data.items || []);
+          if (posts.length > 0) {
+            return posts.slice(0, 10).map((p: any) => ({
+              id: p.id || p._id || p.post_id,
+              user: p.user || p.creator || p.author || null
+            }));
+          }
+        }
+      } catch (apiErr) {
+        // API failed, try DOM scraping
+      }
+      // Fallback: scrape /feed page (authenticated)
+      await this.page.goto("https://fancentro.com/feed", { timeout: 30000, waitUntil: "domcontentloaded" });
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      const posts = await this.page.evaluate(() => {
+        const items: any[] = [];
+        const selectors = ["a[href*='/post/']", "a[href*='/p/']", "[data-post-id]", "article a[href]"];
+        for (const sel of selectors) {
+          document.querySelectorAll(sel).forEach((el: any) => {
+            const href = el.href || el.getAttribute("href") || "";
+            const postIdAttr = el.getAttribute("data-post-id");
+            if (postIdAttr) {
+              items.push({ id: postIdAttr });
+            } else {
+              const match = href.match(/\/(?:post|p)\/([\w\d-]+)/);
+              if (match) items.push({ id: match[1] });
+            }
+          });
+          if (items.length > 0) break;
+        }
+        const seen = new Set();
+        return items.filter(p => {
+          if (seen.has(p.id)) return false;
+          seen.add(p.id);
+          return true;
+        });
+      });
+      return posts.slice(0, 10);
+    }
+    catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      if (error instanceof SessionTimeoutError)
+        throw error;
+      throw new BotError("get feed failed", {
+        where: "FancentroBrowser::getFeed",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async commentPost(postId: string, comment: string) {
+    try {
+      const resp = await this.page.request.post(`https://fancentro.mainhub.com/posts/${postId}/comment`, {
+        headers: this.headers,
+        data: { token: this.token, body: comment }
+      });
+      if (!resp.ok()) {
+        throw new BotError("comment post failed", {
+          where: "FancentroBrowser::commentPost",
+          method: "POST",
+          endpoint: `https://fancentro.mainhub.com/posts/${postId}/comment`,
+          status: resp.statusText(),
+          response: await resp.text()
+        });
+      }
+      return await resp.json();
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("comment post failed", { where: "FancentroBrowser::commentPost", error: error.message, stack: error.stack });
+    }
+  }
+  async likePost(postId: string) {
+    try {
+      const resp = await this.page.request.post(`https://fancentro.mainhub.com/posts/${postId}/like`, {
+        headers: this.headers,
+        data: { token: this.token }
+      });
+      if (!resp.ok()) {
+        throw new BotError("like post failed", {
+          where: "FancentroBrowser::likePost",
+          method: "POST",
+          endpoint: `https://fancentro.mainhub.com/posts/${postId}/like`,
+          status: resp.statusText(),
+          response: await resp.text()
+        });
+      }
+      return await resp.json();
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("like post failed", { where: "FancentroBrowser::likePost", error: error.message, stack: error.stack });
     }
   }
 }

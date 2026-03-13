@@ -6,6 +6,7 @@ import {
   DEFAULT_LIVING_POSTS,
   POST_LIMITED,
   PostResultType,
+  PostType,
   ScheduleStatus,
 } from "../types/constant";
 import {
@@ -48,13 +49,16 @@ export class MaloumBot extends PostBot {
   }
 
   private async deleteOldPosts() {
+    // Check if auto-delete is enabled
+    if (this.settings.params?.autoDelete === false) return [];
     let deleteIds = [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       const postIds: string[] = await this.browser.getSelfFreePosts();
       this.logger.info(`published posts: ${postIds.length}`);
-      while (postIds.length > postCount) {
+      while (postIds.length > postCount && deleteIds.length < maxDelete) {
         const postDeleting = postIds.pop();
         if (postDeleting) {
           await this.browser.deletePost(postDeleting);
@@ -123,11 +127,21 @@ export class MaloumBot extends PostBot {
         });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      const result = await this.browser.publishPost(
-        content.title,
-        content.postTags,
-        mediaId,
-      );
+      const mPostType = (content.postType === "PAID") ? PostType.PAID : (content.postType === "FANS" || content.postType === "FAN") ? PostType.FANS : PostType.FREE;
+      const result = await this.browser.publishPost(content.title, content.postTags, mediaId, mPostType);
+      if (result && result !== POST_LIMITED) {
+        postId = result;
+        try {
+          const verifyResult = await this.browser.verifyPostVisibility(result, mPostType);
+          if (verifyResult.verified) {
+            this.logger.info(`VERIFY OK: ${result} is ${verifyResult.actual} (expected ${verifyResult.expected})`);
+          } else {
+            this.logger.warn(`VERIFY FAIL: ${result} is ${verifyResult.actual} (expected ${verifyResult.expected})`);
+          }
+        } catch (verifyErr:any) {
+          this.logger.info(`verify error: ${verifyErr.message}`);
+        }
+      }
       if (result == POST_LIMITED) {
         await this.service.createLog({
           success: false,

@@ -11,7 +11,7 @@ import { PostApiService } from "../services/post-service";
 export class FanslyBrowser extends BaseBrowser {
 
   protected service!: PostApiService
-  protected profile!: IFanslyProfile;
+  public profile!: IFanslyProfile;
   constructor(config: IBotConfig, logger: Logger) {
     super(config, logger)
   }

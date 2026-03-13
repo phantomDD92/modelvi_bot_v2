@@ -26,7 +26,7 @@ declare global {
 }
 
 export class FanvueBrowser extends BaseBrowser {
-  protected profile!: IFanvueProfile;
+  public profile!: IFanvueProfile;
   // constructor
   constructor(config: IBotConfig, logger: Logger) {
     super(config, logger);
@@ -646,55 +646,322 @@ export class FanvueBrowser extends BaseBrowser {
     }
   }
 
-  public async createPost(title: string, mediaId: string) {
+  public async createPost(title: string, mediaIds: string | string[]) {
     try {
-      const params = {
-        json: {
-          availableToGroupId: 1,
-          contentCollectionUuids: [],
-          expiresAt: null,
-          mediaPreviewUuid: null,
-          mediaUuids: [mediaId],
-          price: null,
-          publishAt: null,
-          text: title,
-        },
-        meta: {
-          values: {
-            expiresAt: ["undefined"],
-            mediaPreviewUuid: ["undefined"],
-            price: ["undefined"],
-            publishAt: ["undefined"],
-          },
-        },
-      };
-      const resp = await this.page.request.post(
-        "https://www.fanvue.com/trpc/post.createPost",
-        {
-          headers: this.headers,
-          data: params,
-        }
-      );
-      if (!resp.ok())
+      const mediaUuids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
+
+      if (mediaUuids.length === 0) {
         throw new BotError("create post failed", {
           where: "FanvueBrowser::createPost",
-          method: "POST",
-          endpoint: "https://www.fanvue.com/trpc/post.createPost",
-          params: JSON.stringify(params),
-          status: resp.statusText(),
-          response: await resp.text(),
+          error: "no media UUIDs provided"
         });
-      const respData = await resp.json();
-      return respData.result?.data?.json?.uuid;
+      }
+
+      this.logger.info(`[createPost] Creating post via UI with ${mediaUuids.length} media, UUIDs: ${mediaUuids.join(', ')}`);
+
+      // Navigate to the creator's home/feed page
+      await this.page.goto("https://www.fanvue.com/", { waitUntil: "domcontentloaded", timeout: 30000 });
+      await this.page.waitForTimeout(3000);
+      // Click Feed tab if visible (some accounts default to Dashboard which has no compose)
+      try {
+        const feedTab = this.page.locator('button:has-text("Feed"), a:has-text("Feed"), [role="tab"]:has-text("Feed")').first();
+        if (await feedTab.isVisible({ timeout: 2000 })) {
+          await feedTab.click();
+          this.logger.info('[createPost] Clicked Feed tab');
+          await this.page.waitForTimeout(2000);
+        }
+      } catch (e) { }
+      // Set up interceptor to capture the actual createPost API call
+      const createPostPromise = this.page.waitForResponse(
+        response => response.url().includes('post.createPost') && response.request().method() === 'POST',
+        { timeout: 120000 }
+      ).catch(() => null);
+
+      // Step 1: Find the compose textarea
+      let composeElement = null;
+      const composeSelectors = [
+        'textarea[placeholder*="Write"]',
+        'textarea[placeholder*="write"]',
+        'textarea[placeholder*="post"]',
+        'div[contenteditable="true"]',
+        'textarea',
+      ];
+
+      // Check if compose area is already visible
+      for (const selector of composeSelectors) {
+        try {
+          const el = this.page.locator(selector).first();
+          if (await el.isVisible({ timeout: 2000 })) {
+            composeElement = el;
+            this.logger.info(`[createPost] Found compose area: ${selector}`);
+            break;
+          }
+        } catch (e) { }
+      }
+
+      // If not found, click "Create" button to open compose area
+      if (!composeElement) {
+        const createSelectors = [
+          'a[href*="create"]',
+          'button:has-text("Create")',
+          'button:has-text("New Post")',
+          '[data-testid="create-post"]',
+        ];
+        for (const selector of createSelectors) {
+          try {
+            const btn = this.page.locator(selector).first();
+            if (await btn.isVisible({ timeout: 2000 })) {
+              await btn.click();
+              this.logger.info(`[createPost] Clicked create button: ${selector}`);
+              await this.page.waitForTimeout(3000);
+              break;
+            }
+          } catch (e) { }
+        }
+
+        // Search for compose area again
+        for (const selector of composeSelectors) {
+          try {
+            const el = this.page.locator(selector).first();
+            if (await el.isVisible({ timeout: 3000 })) {
+              composeElement = el;
+              this.logger.info(`[createPost] Found compose area after click: ${selector}`);
+              break;
+            }
+          } catch (e) { }
+        }
+      }
+
+      if (!composeElement) {
+        throw new BotError("create post failed", {
+          where: "FanvueBrowser::createPost",
+          error: "Could not find compose textarea",
+        });
+      }
+
+      // Type the post text
+      await composeElement.click();
+      await this.page.waitForTimeout(500);
+      await composeElement.fill(title || "");
+      this.logger.info(`[createPost] Typed post text: "${title?.substring(0, 50)}"`);
+
+      // Step 2: Click "Add from vault" to open vault picker
+      let vaultPickerOpened = false;
+      try {
+        const addFromVaultBtn = this.page.locator('button:has-text("Add from vault")');
+        await addFromVaultBtn.waitFor({ state: 'visible', timeout: 5000 });
+        await addFromVaultBtn.click();
+        this.logger.info(`[createPost] Clicked "Add from vault" button`);
+        vaultPickerOpened = true;
+        await this.page.waitForTimeout(3000);
+      } catch (e) {
+        this.logger.warn(`[createPost] "Add from vault" not found, trying other approaches`);
+      }
+
+      if (!vaultPickerOpened) {
+        // Try media button
+        const mediaBtn = this.page.locator('button[aria-label*="Media"], button[aria-label*="media"], button[aria-label*="Attach"]').first();
+        try {
+          if (await mediaBtn.isVisible({ timeout: 2000 })) {
+            await mediaBtn.click();
+            this.logger.info(`[createPost] Clicked media button`);
+            await this.page.waitForTimeout(2000);
+            const vaultOpt = this.page.locator('button:has-text("vault"), li:has-text("vault"), a:has-text("vault"), [role="menuitem"]:has-text("vault")').first();
+            if (await vaultOpt.isVisible({ timeout: 2000 })) {
+              await vaultOpt.click();
+              this.logger.info(`[createPost] Clicked vault option`);
+              vaultPickerOpened = true;
+              await this.page.waitForTimeout(2000);
+            }
+          }
+        } catch (e) { }
+      }
+
+      // Step 3: Select media items in vault picker
+      let mediaSelected = 0;
+
+      // Try to find items by UUID match first
+      for (const uuid of mediaUuids) {
+        const found = await this.page.evaluate((targetUuid: string) => {
+          const dialog = document.querySelector('[role="dialog"]') || document;
+          const allElements = dialog.querySelectorAll('div, span, img, p');
+          for (const el of allElements) {
+            const text = el.textContent || '';
+            const src = (el as HTMLImageElement).src || '';
+            const allAttrs = Array.from(el.attributes || []).map(a => a.value).join(' ');
+            if (text.includes(targetUuid) || src.includes(targetUuid) || allAttrs.includes(targetUuid)) {
+              let parent = el.closest('[class*="MuiGrid"], [class*="MuiCard"], [class*="item"], div') as HTMLElement | null;
+              for (let i = 0; i < 5 && parent; i++) {
+                const selectBtn = parent.querySelector('button[aria-label="Select media"]') as HTMLButtonElement;
+                if (selectBtn && !selectBtn.disabled) {
+                  selectBtn.click();
+                  return true;
+                }
+                parent = parent.parentElement;
+              }
+            }
+          }
+          return false;
+        }, uuid);
+
+        if (found) {
+          mediaSelected++;
+          this.logger.info(`[createPost] Selected media by UUID match: ${uuid}`);
+          await this.page.waitForTimeout(500);
+        }
+      }
+
+      // Fallback: select first N "Select media" buttons
+      if (mediaSelected === 0) {
+        const selectButtons = this.page.locator('button[aria-label="Select media"]');
+        const count = await selectButtons.count();
+        this.logger.info(`[createPost] No UUID match, found ${count} "Select media" buttons, selecting first ${mediaUuids.length}`);
+
+        for (let i = 0; i < Math.min(count, mediaUuids.length); i++) {
+          try {
+            await selectButtons.nth(i).click();
+            mediaSelected++;
+            this.logger.info(`[createPost] Selected media item ${i + 1}`);
+            await this.page.waitForTimeout(500);
+          } catch (e) {
+            this.logger.warn(`[createPost] Failed to click Select media button ${i + 1}`);
+          }
+        }
+      }
+
+      this.logger.info(`[createPost] Total media selected: ${mediaSelected}`);
+
+      if (mediaSelected === 0) {
+        throw new BotError("create post failed", {
+          where: "FanvueBrowser::createPost",
+          error: "Could not select any media in vault picker",
+        });
+      }
+
+      // Step 4: Click "Add Media" button to confirm vault selection
+      await this.page.waitForTimeout(1000);
+      let addMediaClicked = false;
+      try {
+        const addMediaBtn = this.page.locator('button:has-text("Add Media")');
+        await addMediaBtn.waitFor({ state: 'visible', timeout: 5000 });
+        for (let i = 0; i < 10; i++) {
+          if (!(await addMediaBtn.isDisabled())) break;
+          await this.page.waitForTimeout(500);
+        }
+        if (!(await addMediaBtn.isDisabled())) {
+          await addMediaBtn.click();
+          this.logger.info(`[createPost] Clicked "Add Media" button`);
+          addMediaClicked = true;
+          await this.page.waitForTimeout(2000);
+        }
+      } catch (e) {
+        this.logger.warn(`[createPost] "Add Media" button not found`);
+      }
+
+      if (!addMediaClicked) {
+        for (const text of ['Add', 'Confirm', 'Done', 'Apply']) {
+          try {
+            const btn = this.page.locator(`button:has-text("${text}"):not([disabled])`).first();
+            if (await btn.isVisible({ timeout: 1000 })) {
+              await btn.click();
+              this.logger.info(`[createPost] Clicked "${text}" button (alternative)`);
+              await this.page.waitForTimeout(1000);
+              break;
+            }
+          } catch (e) { }
+        }
+      }
+
+      // Step 5: Close vault dialog if still open
+      await this.page.waitForTimeout(1000);
+      try {
+        const closeBtn = this.page.locator('button[aria-label="Close dialog"], button[aria-label="Close"], [role="dialog"] button:first-child, button:near(:text("Vault"))').first();
+        if (await closeBtn.isVisible({ timeout: 2000 })) {
+          await closeBtn.click();
+          this.logger.info('[createPost] Closed vault dialog via button');
+          await this.page.waitForTimeout(1500);
+        }
+      }
+      catch (e) { }
+      // Press Escape to ensure any open dialogs are closed
+      try {
+        const dialog = this.page.locator('[role="dialog"]').first();
+        if (await dialog.isVisible({ timeout: 1000 })) {
+          await this.page.keyboard.press('Escape');
+          this.logger.info('[createPost] Pressed Escape to close dialog');
+          await this.page.waitForTimeout(1500);
+        }
+      }
+      catch (e) { }
+
+      // Step 6: Click "Create post" button to submit
+      let posted = false;
+      try {
+        const createPostBtn = this.page.locator('button:has-text("Create post")');
+        await createPostBtn.waitFor({ state: 'visible', timeout: 10000 });
+        for (let i = 0; i < 10; i++) {
+          if (!(await createPostBtn.isDisabled())) break;
+          await this.page.waitForTimeout(1000);
+        }
+        await createPostBtn.click();
+        this.logger.info(`[createPost] Clicked "Create post" button`);
+        posted = true;
+      } catch (e) {
+        // Fallback to other post button labels
+        for (const text of ['Post', 'Publish', 'Submit', 'Share', 'Send']) {
+          try {
+            const btn = this.page.locator(`button:has-text("${text}")`).first();
+            if (await btn.isVisible({ timeout: 1000 }) && !(await btn.isDisabled())) {
+              await btn.click();
+              this.logger.info(`[createPost] Clicked "${text}" button (fallback)`);
+              posted = true;
+              break;
+            }
+          } catch (e2) { }
+        }
+      }
+
+      if (!posted) {
+        throw new BotError("create post failed", {
+          where: "FanvueBrowser::createPost",
+          error: "Could not find post/submit button",
+        });
+      }
+
+      // Step 7: Wait for the createPost API response
+      await this.page.waitForTimeout(3000);
+      let capturedPostUuid: string | undefined;
+      const createPostResp = await createPostPromise;
+      if (createPostResp) {
+        if (createPostResp.ok()) {
+          try {
+            const respText = await createPostResp.text();
+            const respData = JSON.parse(respText);
+            const data = Array.isArray(respData) ? respData[0] : respData;
+            capturedPostUuid = data.result?.data?.json?.uuid;
+            this.logger.info(`[createPost] Post created successfully: ${capturedPostUuid}`);
+          } catch (e) {
+            this.logger.warn(`[createPost] Could not parse createPost response`);
+          }
+        } else {
+          this.logger.warn(`[createPost] API responded with ${createPostResp.status()}`);
+        }
+      } else {
+        this.logger.warn(`[createPost] createPost API response not captured (timeout)`);
+      }
+
+      return capturedPostUuid;
     } catch (error: any) {
-      if (error instanceof BotError) throw error;
+      if (error instanceof BotError)
+        throw error;
       throw new BotError("create post failed", {
         where: "FanvueBrowser::createPost",
         error: error.message,
         stack: error.stack,
-      });
+      })
     }
   }
+
 
   public async deletePost(postId: string): Promise<void> {
     try {
@@ -766,6 +1033,98 @@ export class FanvueBrowser extends BaseBrowser {
         error: error.message,
         stack: error.stack,
       });
+    }
+  }
+
+  public async getFeed() {
+    try {
+      const params = {
+        input: JSON.stringify({
+          "json": {
+            "cursor": null,
+            "direction": "forward"
+          },
+          "meta": {
+            "values": {
+              "cursor": ["undefined"]
+            }
+          }
+        })
+      };
+      const resp = await this.page.request.get("https://www.fanvue.com/trpc/post.getFeed", {
+        headers: this.headers,
+        params
+      });
+      if (!resp.ok())
+        throw new BotError("get feed failed", {
+          where: "FanvueBrowser::getFeed",
+          method: "GET",
+          endpoint: "https://www.fanvue.com/trpc/post.getFeed",
+          status: resp.statusText(),
+          response: await resp.text(),
+        });
+      const respData = await resp.json();
+      return respData.result?.data?.json?.items || [];
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("get feed failed", {
+        where: "FanvueBrowser::getFeed",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async commentPost(postId: string, comment: string) {
+    try {
+      const batchPayload = { "0": { postId: postId, text: comment } };
+      const fetchResult = await this.page.evaluate(async (payload) => {
+        const response = await fetch("https://www.fanvue.com/trpc/post.createComment?batch=1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        return { status: response.status, statusText: response.statusText, body: await response.text() };
+      }, batchPayload);
+      if (fetchResult.status !== 200) {
+        throw new BotError("comment post failed", {
+          where: "FanvueBrowser::commentPost",
+          status: fetchResult.statusText,
+          response: fetchResult.body
+        });
+      }
+      return JSON.parse(fetchResult.body);
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("comment post failed", { where: "FanvueBrowser::commentPost", error: error.message, stack: error.stack });
+    }
+  }
+
+  public async likePost(postId: string) {
+    try {
+      const batchPayload = { "0": { postId: postId } };
+      const fetchResult = await this.page.evaluate(async (payload) => {
+        const response = await fetch("https://www.fanvue.com/trpc/post.likePost?batch=1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        return { status: response.status, statusText: response.statusText, body: await response.text() };
+      }, batchPayload);
+      if (fetchResult.status !== 200) {
+        throw new BotError("like post failed", {
+          where: "FanvueBrowser::likePost",
+          status: fetchResult.statusText,
+          response: fetchResult.body
+        });
+      }
+      return JSON.parse(fetchResult.body);
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("like post failed", { where: "FanvueBrowser::likePost", error: error.message, stack: error.stack });
     }
   }
 }

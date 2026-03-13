@@ -924,8 +924,8 @@ export class MaloumBrowser extends BaseBrowser {
         .first()
         .click();
       const resp = await respPromise;
+      const respData = await resp.json();
       if (!resp.ok()) {
-        const respData = await resp.json();
         if (respData.statusCode == 429) return POST_LIMITED;
         throw new BotError("publish post failed", {
           where: "MaloumBrowser::publishPost",
@@ -935,13 +935,35 @@ export class MaloumBrowser extends BaseBrowser {
           response: await resp.text(),
         });
       }
-      return "";
+      return respData?.id || "";
     } catch (error: any) {
       if (error instanceof BotError) throw error;
       throw new BotError("publish post failed", {
         where: "MaloumBrowser::publishPost",
         message: error.message,
       });
+    }
+  }
+
+  public async verifyPostVisibility(postId: string, postType: number) {
+    try {
+      const resp = await this.page.request.fetch(`https://api.maloum.com/posts/${postId}`, {
+        headers: { 'Accept': 'application/json', },
+      });
+      if (!resp.ok()) {
+        return { verified: false, actual: 'not_found', expected: postType === PostType.FREE ? 'public' : 'paid' };
+      }
+      const postData = await resp.json();
+      const isPublic = postData.public === true;
+      const expected = postType === PostType.FREE ? 'public' : 'paid';
+      const actual = isPublic ? 'public' : 'paid';
+      return {
+        verified: actual === expected,
+        actual: actual,
+        expected: expected,
+      };
+    } catch (error: any) {
+      return { verified: false, actual: 'error: ' + error.message, expected: postType === PostType.FREE ? 'public' : 'paid' };
     }
   }
 

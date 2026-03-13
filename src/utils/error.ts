@@ -1,16 +1,18 @@
 export class BotError extends Error {
   public reason: any;
-  constructor(message: string, reason: any = undefined) {
+  public discord: boolean;
+  constructor(message: string, reason: any = undefined, discord = true) {
     super(message); // Call the parent constructor with the message
     this.name = "BotError"; // Set the error name
     this.reason = reason;
+    this.discord = discord;
   }
 }
 
 export class SessionTimeoutError extends BotError {
   public reason: any;
   constructor(message: string, reason: any = undefined) {
-    super(message, reason); // Call the parent constructor with the message
+    super(message, reason, false); // Call the parent constructor with the message
     this.name = "SessionTimeoutError";
   }
 }

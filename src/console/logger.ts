@@ -4,7 +4,7 @@ import axios from "axios"
 
 export class ConsoleLogger {
   protected config: IConsoleConfig
-  
+
   constructor(config: IConsoleConfig) {
     this.config = config
   }
@@ -23,6 +23,7 @@ export class ConsoleLogger {
   }
 
   public async notify(message: string): Promise<void> {
+    console.log(`[${moment().format("YYYY-MM-DD HH:mm:ss")} : ${this.config.platform} CON - ${this.config.id}] : ${message}`)
     if (this.config.channel_notify) {
       axios.post(this.config.channel_notify, {
         username: `${this.config.platform} CON - ${this.config.id}`,

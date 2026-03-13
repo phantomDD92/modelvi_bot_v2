@@ -742,4 +742,95 @@ export class FourBasedBrowser extends BaseBrowser {
       });
     }
   }
+
+  public async getFeed() {
+    try {
+      const users = await this.getUsers("creator");
+      const posts = [];
+      for (const user of users) {
+        if (user._id === this.profile._id) continue;
+        try {
+          const resp = await this.page.request.get(`https://rest.4based.com/api/1.0/user/${user._id}/file-stack`, {
+            headers: this.headers,
+            params: {
+              offset: 0,
+              limit: 5,
+              categories: "media",
+              sort: JSON.stringify({ created_at: "desc" }),
+              is_subscription_item: false,
+            },
+          });
+          if (!resp.ok() || resp.status() === 204) continue;
+          const userPosts = await resp.json();
+          if (Array.isArray(userPosts) && userPosts.length > 0) {
+            posts.push(...userPosts.map(p => ({ _id: p._id, creatorId: user._id, creatorName: user.name })));
+            if (posts.length >= 10) break;
+          }
+        }
+        catch (e) { }
+        await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 1500) + 1000));
+      }
+      return posts;
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      if (error instanceof SessionTimeoutError) throw error;
+      throw new BotError("get feed failed", {
+        where: "FourBasedBrowser::getFeed",
+        error: error.message,
+        stack: error.stack,
+      });
+    }
+  }
+
+  public async commentPost(postId: string, comment: string) {
+    try {
+      const resp = await this.page.request.post(`https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/${postId}/comment`, {
+        headers: this.headers,
+        data: { text: comment }
+      });
+      const respData = await resp.json();
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", { where: "FourBasedBrowser::commentPost" });
+        throw new BotError("comment post failed", {
+          where: "FourBasedBrowser::commentPost",
+          method: "POST",
+          endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/${postId}/comment`,
+          status: resp.statusText(),
+          response: respData
+        });
+      }
+      return respData;
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("comment post failed", { where: "FourBasedBrowser::commentPost", error: error.message, stack: error.stack });
+    }
+  }
+
+  public async likePost(postId: string) {
+    try {
+      const resp = await this.page.request.post(`https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/${postId}/like`, {
+        headers: this.headers
+      });
+      const respData = await resp.json();
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", { where: "FourBasedBrowser::likePost" });
+        throw new BotError("like post failed", {
+          where: "FourBasedBrowser::likePost",
+          method: "POST",
+          endpoint: `https://rest.4based.com/api/1.0/user/${this.profile._id}/file-stack/${postId}/like`,
+          status: resp.statusText(),
+          response: respData
+        });
+      }
+      return respData;
+    }
+    catch (error: any) {
+      if (error instanceof BotError) throw error;
+      throw new BotError("like post failed", { where: "FourBasedBrowser::likePost", error: error.message, stack: error.stack });
+    }
+  }
 }

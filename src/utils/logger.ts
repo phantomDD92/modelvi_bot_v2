@@ -107,20 +107,17 @@ export class Logger {
     }
     if (channel_error) {
       if (error instanceof BotError) {
-        axios.post(channel_error, {
-          username: `********** [ ${this.config.platform} ] ${this.config.alias}`,
-          content: `[ ${moment().format("YYYY-MM-DD HH:mm:ss")} ]\n${error.message}\n${JSON.stringify(error.reason, null, 2)}`.substring(0, 1500),
-        })
-          .then(() => { })
-          .catch(() => { });
-
+        // when bot error is for discord, then send log
+        if (error.discord)
+          axios.post(channel_error, {
+            username: `********** [ ${this.config.platform} ] ${this.config.alias}`,
+            content: `[ ${moment().format("YYYY-MM-DD HH:mm:ss")} ]\n${error.message}\n${JSON.stringify(error.reason, null, 2)}`.substring(0, 1500),
+          }).then(() => { }).catch(() => { });
       } else {
         axios.post(channel_error, {
           username: `********** [ ${this.config.platform} ] ${this.config.alias}`,
           content: `[ ${moment().format("YYYY-MM-DD HH:mm:ss")} ]\n${error.message}\n${error.stack}`.substring(0, 1500),
-        })
-          .then(() => { })
-          .catch(() => { });
+        }).then(() => { }).catch(() => { });
       }
     }
   }
@@ -171,11 +168,11 @@ export class Logger {
     }
     if (channel_error) {
       if (error instanceof BotError) {
-        await axios.post(channel_error, {
-          username: `********** [ ${this.config.platform} ] ${this.config.alias}`,
-          content: `[ ${moment().format("YYYY-MM-DD HH:mm:ss")} ]\n${error.message}\n${JSON.stringify(error.reason, null, 2)}`.substring(0, 1500),
-        });
-
+        if (error.discord)
+          await axios.post(channel_error, {
+            username: `********** [ ${this.config.platform} ] ${this.config.alias}`,
+            content: `[ ${moment().format("YYYY-MM-DD HH:mm:ss")} ]\n${error.message}\n${JSON.stringify(error.reason, null, 2)}`.substring(0, 1500),
+          });
       } else {
         axios.post(channel_error, {
           username: `********** [ ${this.config.platform} ] ${this.config.alias}`,

@@ -15,6 +15,7 @@ import {
   ActionType,
   DEFAULT_LIVING_POSTS as DEFAULT_LIVING_POSTS,
   PostResultType,
+  PostType,
   ScheduleStatus,
 } from "../types/constant";
 import { isNormalMedia } from "../utils/helper";
@@ -91,9 +92,12 @@ export class FanvueBot extends PostBot {
   }
 
   private async deleteOldPosts() {
+    // Check if auto-delete is enabled
+    if (this.settings.params?.autoDelete === false) return [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       const postRemains = this.settings.params?.postRemains || [];
       const postIds: string[] = await this.browser.getSelfPosts();
       const postsPublished = postIds.filter((postId) =>
@@ -103,7 +107,7 @@ export class FanvueBot extends PostBot {
         `submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`
       );
       const deleteIds = [];
-      while (postsPublished.length > postCount) {
+      while (postsPublished.length > postCount && deleteIds.length < maxDelete) {
         const postDeleting = postsPublished.pop();
         if (postDeleting) {
           await this.browser.deletePost(postDeleting);
@@ -163,7 +167,9 @@ export class FanvueBot extends PostBot {
         });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
-      const postId = await this.browser.createPost(content.title, mediaId);
+      const postType = (content.postType === 'PAID') ? PostType.PAID : (content.postType === 'FANS' || content.postType === 'FAN') ? PostType.FANS : PostType.FREE;
+      const postPrice = postType === PostType.PAID ? (content.price || 0) : 0;
+      const postId = await this.browser.schedulePost(new Date(), content.title, [mediaId], postType, postPrice);
       if (postId) {
         await this.service.createLog({
           success: true,
@@ -334,8 +340,47 @@ export class FanvueBot extends PostBot {
     return false;
   }
 
-  protected needComment(): boolean {
-    return false;
+  protected async doComment() {
+    try {
+      const params = await this.service.updateCommentSetting();
+      if (params.comments.length === 0)
+        return true;
+      await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
+      const posts = await this.browser.getFeed();
+      let success = false;
+      for (const post of posts) {
+        if (post.creatorUuid === this.browser.profile.uuid)
+          continue;
+        if (params.block_users.includes(post.creatorHandle || ''))
+          continue;
+        try {
+          await this.browser.likePost(post.uuid);
+        }
+        catch (e) { }
+        await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 3000) + 2000));
+        const comment = this.pickup(params.comments);
+        await this.browser.commentPost(post.uuid, comment);
+        await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
+        await this.service.createLog({
+          success: true,
+          action: ActionType.COMMENT,
+          message: `comment post`,
+          target: post.uuid,
+        });
+        success = true;
+        break;
+      }
+      return true;
+    }
+    catch (error) {
+      this.logger.notifyError(error);
+      await this.service.createLog({
+        success: false,
+        action: ActionType.COMMENT,
+        message: "failed to comment",
+      });
+      return false;
+    }
   }
 
   // protected needSchedule(): boolean {

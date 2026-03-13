@@ -73,13 +73,16 @@ export class FetLifeBot extends PostBot {
   }
 
   private async removePosts(): Promise<string[]> {
+    // Check if auto-delete is enabled
+    if (this.settings.params?.autoDelete === false) return [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       const postRemains = this.settings.params?.postRemains || [];
       this.logger.info(`submitted posts: ${postRemains.length}`);
       const deleteIds = [];
-      while (postRemains.length > postCount) {
+      while (postRemains.length > postCount && deleteIds.length < maxDelete) {
         const postDeleting = postRemains.shift()
         if (postDeleting) {
           await this.browser.deletePost(postDeleting);

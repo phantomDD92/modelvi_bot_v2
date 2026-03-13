@@ -79,14 +79,17 @@ export class LoyalFansBot extends PostBot {
   }
 
   private async removePosts(): Promise<string[]> {
+    // Check if auto-delete is enabled
+    if (this.settings.params?.autoDelete === false) return [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       // const postRemains = this.settings.params?.postRemains || [];
       const postIds = await this.browser.getSelfFreePosts();
       this.logger.info(`submitted posts: ${postIds.length}`);
       const deleteIds = [];
-      while (postIds.length > postCount) {
+      while (postIds.length > postCount && deleteIds.length < maxDelete) {
         const postDeleting = postIds.pop()
         if (postDeleting) {
           await this.browser.deletePost(postDeleting);
