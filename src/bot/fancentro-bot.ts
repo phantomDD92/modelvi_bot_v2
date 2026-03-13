@@ -251,7 +251,7 @@ export class FancentroBot extends PostBot {
     // }
     return false;
   }
-
+  
   protected async doComment() {
     try {
       const params: ICommentParams = await this.service.updateCommentSetting();
@@ -259,12 +259,12 @@ export class FancentroBot extends PostBot {
       const posts = await this.browser.getFeed();
       let success = false;
       for (var post of posts) {
-        if (post.user != this.config.alias && !params.block_users.includes(post.user)) {
+        if (post.model?.alias != this.config.alias && !params.block_users.includes(post.model?.alias)) {
           success = await this.browser.likePost(post.id);
           if (success) {
             const comment = this.pickup(params.comments);
             await this.browser.commentPost(post.id, comment);
-            await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `comment ${post.creator}'s post`, target: post.uuid, });
+            await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `comment ${post.model?.alias}'s post`, target: `${post.id}`, });
             break;
           }
         }
@@ -275,49 +275,6 @@ export class FancentroBot extends PostBot {
       await this.service.createLog({ success: false, action: ActionType.COMMENT, message: `failed to comment a post`, });
       return false;
     }
-    // try {
-    //   const params = await this.service.updateCommentSetting();
-    //   if (params.comments.length === 0)
-    //     return true;
-    //   await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
-    //   const posts = await this.browser.getFeed();
-    //   let success = false;
-    //   for (const post of posts) {
-    //     const postId = post.id || post._id || post.uuid;
-    //     const creator = post.user || post.creator || post.author || {};
-    //     const creatorName = creator.username || creator.name || creator.alias || '';
-    //     if (creatorName === this.config.alias)
-    //       continue;
-    //     if (params.block_users.includes(creatorName))
-    //       continue;
-    //     try {
-    //       await this.browser.likePost(postId);
-    //     }
-    //     catch (e) { }
-    //     await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 3000) + 2000));
-    //     const comment = this.pickup(params.comments);
-    //     await this.browser.commentPost(postId, comment);
-    //     await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
-    //     await this.service.createLog({
-    //       success: true,
-    //       action: ActionType.COMMENT,
-    //       message: `comment ${creatorName}'s post`,
-    //       target: postId,
-    //     });
-    //     success = true;
-    //     break;
-    //   }
-    //   return true;
-    // }
-    // catch (error) {
-    //   this.logger.notifyError(error);
-    //   await this.service.createLog({
-    //     success: false,
-    //     action: ActionType.COMMENT,
-    //     message: "failed to comment",
-    //   });
-    //   return false;
-    // }
   }
 
   protected needStory(): boolean {

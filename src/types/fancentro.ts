@@ -25,6 +25,18 @@ export interface IFancentroProfile {
   subscribedCount: number,
   alias?: string,
 }
+
+export interface IFancentroFeed {
+  id: number,
+  model: {
+    alias: string,
+    id: number,
+    stageName: string,
+  },
+  title: string,
+  type: string,
+}
+
 export interface IFncVault {
   type: string,
   id: string,

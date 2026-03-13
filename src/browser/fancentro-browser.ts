@@ -1,7 +1,7 @@
 import moment from "moment";
 import { BaseBrowser } from "./base-browser";
 import { PostType } from "../types/constant";
-import { IFancentroLabel, IFancentroPost, IFancentroProfile, IFancentroVaultItem } from "../types/fancentro";
+import { IFancentroFeed, IFancentroLabel, IFancentroPost, IFancentroProfile, IFancentroVaultItem } from "../types/fancentro";
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
 import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { Logger } from "../utils/logger";
@@ -10,7 +10,7 @@ export class FancentroBrowser extends BaseBrowser {
 
   protected token!: string;
   protected profile!: IFancentroProfile;
-
+  protected apiHeader!: {};
   // constructor
   constructor(config: IBotConfig, logger: Logger) {
     super(config, logger)
@@ -62,6 +62,7 @@ export class FancentroBrowser extends BaseBrowser {
         where: "FancentroBrowser::getAuthResult",
         method: "POST",
         endpoint: "https://fancentro.com/api/v1/api/authenticate",
+        params: authResp.request().postData(),
         status: authResp.statusText(),
         response: await authResp.text(),
       })
@@ -167,6 +168,7 @@ export class FancentroBrowser extends BaseBrowser {
       const profileResp = await profilePromise;
       const profileData = await profileResp.json();
       this.profile = profileData;
+      this.apiHeader = await profileResp.request().allHeaders();
       if (profileData.showCompleteProfileModal == 'NO_PURCHASES_USER')
         throw new AuthError("profile consent required", {
           where: "FancentroBrowser::login",
@@ -438,6 +440,7 @@ export class FancentroBrowser extends BaseBrowser {
             where: "FancentroBrowser::getPosts",
             method: "GET",
             endpoint: `https://fancentro.mainhub.com/posts/find`,
+            params,
             status: resp.statusText(),
             response: await resp.text(),
           });
@@ -477,6 +480,7 @@ export class FancentroBrowser extends BaseBrowser {
         where: "FancentroBrowser::deletePost",
         method: "POST",
         endpoint: `https://fancentro.mainhub.com/posts/${postId}/delete`,
+        params: { token: this.token },
         status: resp.statusText(),
         response: await resp.text(),
       })
@@ -647,13 +651,11 @@ export class FancentroBrowser extends BaseBrowser {
     }
   }
 
-  public async getFeed() {
+  public async getFeed(): Promise<IFancentroFeed[]> {
     try {
-      await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
-      // Try API first: get feed posts via mainhub API
-      const resp = await this.page.request.get("https://fancentro.mainhub.com/posts/feed", {
-        headers: this.headers,
-        params: { token: this.token, limit: 20, offset: 0 }
+      const resp = await this.page.request.get("https://fancentro.com/api/content/content", {
+        headers: this.apiHeader,
+        params: { page: 1, page_size: 22, sorting: "newest", filter: "public", source: "discover", type: "post" }
       });
       if (!resp.ok())
         throw new BotError("get feed failed", {
@@ -664,39 +666,8 @@ export class FancentroBrowser extends BaseBrowser {
           response: await resp.text()
         })
       const respData = await resp.json();
-      const posts = Array.isArray(respData) ? respData : (respData.posts || respData.data || respData.items || []);
-      if (posts.length > 0) {
-        return posts.slice(0, 10).map((p: any) => ({
-          id: p.id || p._id || p.post_id,
-          user: p.user || p.creator || p.author || null
-        }));
-      }
-      // await this.page.goto("https://fancentro.com/feed", { timeout: 30000, waitUntil: "domcontentloaded" });
-      // await new Promise(resolve => setTimeout(resolve, 4000));
-      // const posts = await this.page.evaluate(() => {
-      //   const items: any[] = [];
-      //   const selectors = ["a[href*='/post/']", "a[href*='/p/']", "[data-post-id]", "article a[href]"];
-      //   for (const sel of selectors) {
-      //     document.querySelectorAll(sel).forEach((el: any) => {
-      //       const href = el.href || el.getAttribute("href") || "";
-      //       const postIdAttr = el.getAttribute("data-post-id");
-      //       if (postIdAttr) {
-      //         items.push({ id: postIdAttr });
-      //       } else {
-      //         const match = href.match(/\/(?:post|p)\/([\w\d-]+)/);
-      //         if (match) items.push({ id: match[1] });
-      //       }
-      //     });
-      //     if (items.length > 0) break;
-      //   }
-      //   const seen = new Set();
-      //   return items.filter(p => {
-      //     if (seen.has(p.id)) return false;
-      //     seen.add(p.id);
-      //     return true;
-      //   });
-      // });
-      // return posts.slice(0, 10);
+      const feeds = respData.data || [];
+      return feeds;
     }
     catch (error: any) {
       if (error instanceof BotError)
@@ -706,52 +677,55 @@ export class FancentroBrowser extends BaseBrowser {
       throw new BotError("get feed failed", {
         where: "FancentroBrowser::getFeed",
         error: error.message,
+
       });
     }
   }
 
-  public async commentPost(postId: string, comment: string) {
+  public async commentPost(postId: number, comment: string) {
     try {
-      const resp = await this.page.request.post(`https://fancentro.mainhub.com/posts/${postId}/comment`, {
-        headers: this.headers,
-        data: { token: this.token, body: comment }
+      const resp = await this.page.request.post(`https://fancentro.com/api/content/comment/post`, {
+        headers: this.apiHeader,
+        data: { post_id: postId, comment }
       });
       if (!resp.ok()) {
         throw new BotError("comment post failed", {
           where: "FancentroBrowser::commentPost",
           method: "POST",
-          endpoint: `https://fancentro.mainhub.com/posts/${postId}/comment`,
+          endpoint: `https://fancentro.com/api/content/comment/post`,
           status: resp.statusText(),
           response: await resp.text()
         });
       }
-      return await resp.json();
+      const respData = await resp.json();
+      return;
     }
     catch (error: any) {
       if (error instanceof BotError) throw error;
       throw new BotError("comment post failed", {
         where: "FancentroBrowser::commentPost",
-        error: error.message
+        error: error.message,
       });
     }
   }
 
-  public async likePost(postId: string) {
+  public async likePost(postId: number): Promise<boolean> {
     try {
-      const resp = await this.page.request.post(`https://fancentro.mainhub.com/posts/${postId}/like`, {
-        headers: this.headers,
-        data: { token: this.token }
+      const resp = await this.page.request.post(`https://fancentro.com/api/content/like`, {
+        headers: this.apiHeader,
+        data: { contentId: postId, contentType: "post" }
       });
       if (!resp.ok()) {
         throw new BotError("like post failed", {
           where: "FancentroBrowser::likePost",
           method: "POST",
-          endpoint: `https://fancentro.mainhub.com/posts/${postId}/like`,
+          endpoint: `https://fancentro.com/api/content/like`,
           status: resp.statusText(),
           response: await resp.text()
         });
       }
-      return await resp.json();
+      const respData = await resp.json();
+      return respData.total > 0;
     }
     catch (error: any) {
       if (error instanceof BotError) throw error;
