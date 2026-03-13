@@ -32,7 +32,7 @@ export class FancentroBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
         where: "FancentroBrowser::home",
-        message: error.message
+        error: error.message
       });
     }
   }
@@ -72,26 +72,26 @@ export class FancentroBrowser extends BaseBrowser {
       if (message.includes("Invalid"))
         throw new AuthError("wrong credentials", {
           where: "FancentroBrowser::login",
-          message: "invalid email, password",
+          error: "invalid email, password",
         });
       else if (message.includes("Captcha"))
         return "captcha"
       else if (message.includes("Something went wrong"))
         throw new AuthError("something went wrong", {
           where: "FancentroBrowser::getAuthResult",
-          message: await authResp.text(),
+          error: await authResp.text(),
         });
       else if (message.includes("Account disabled"))
         throw new AuthError("account blocked", {
           where: "FancentroBrowser::getAuthResult",
-          message: await authResp.text(),
+          error: await authResp.text(),
         });
       if (respData.twoStepVerification) {
         return "twofa";
       }
       throw new BotError("login failed", {
         where: "FancentroBrowser::getAuthResult",
-        message: await authResp.text(),
+        error: await authResp.text(),
       });
     } catch (error) {
       if (error instanceof BotError)
@@ -106,7 +106,7 @@ export class FancentroBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new BotError("solve captcha failed", {
         where: "FancentroBrowser::solveCaptcha",
-        message: error.message,
+        error: error.message,
       })
     }
   }
@@ -138,13 +138,13 @@ export class FancentroBrowser extends BaseBrowser {
       if (authResult == "captcha")
         throw new BotError("captcha failed", {
           where: "FancentroBrowser::login",
-          message: "solve captcha failed",
+          error: "solve captcha failed",
         });
       if (authResult == "twofa") {
         if (!setting.device)
           throw new AuthError("no security key", {
             where: "FancentroBrowser::login",
-            message: "no security key",
+            error: "no security key",
           });
         const code = await this.generate2FACode(setting.device)
         await this.page.locator("input[name='verification_code']").waitFor();
@@ -154,7 +154,7 @@ export class FancentroBrowser extends BaseBrowser {
       if (authResult != "success") {
         throw new BotError(`${authResult} failed`, {
           where: "FancentroBrowser::login",
-          message: "invalid security key",
+          error: "invalid security key",
         });
       }
       const profilePromise = this.page.waitForResponse(response =>
@@ -200,7 +200,7 @@ export class FancentroBrowser extends BaseBrowser {
       else
         throw new BotError("login failed", {
           where: "FancentroBrowser::login",
-          message: error.message
+          error: error.message
         })
     }
   }
@@ -294,7 +294,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("find or create folder failed", {
         where: "FancentroBrowser::findOrCreateFolder",
-        message: error.message
+        error: error.message
       })
     }
   }
@@ -405,7 +405,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("get vault failed", {
         where: "FancentroBrowser::getVault",
-        message: error.message
+        error: error.message
 
       })
     }
@@ -457,7 +457,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("get posts failed", {
         where: "FancentroBrowser::getPosts",
-        message: error.message
+        error: error.message
 
       })
     }
@@ -482,7 +482,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("delete post failed", {
         where: "FancentroBrowser::deletePost",
-        message: error.message
+        error: error.message
 
       })
     }
@@ -602,7 +602,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("schedule post failed", {
         where: "FancentroBrowser::schedulePost",
-        message: error.message
+        error: error.message
       })
     }
   }
@@ -639,7 +639,7 @@ export class FancentroBrowser extends BaseBrowser {
         throw error;
       throw new BotError("get earnings failed", {
         where: "FancentroBrowser::getMonthlyEarnings",
-        message: error.message
+        error: error.message
       });
     }
   }

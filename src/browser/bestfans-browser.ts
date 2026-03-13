@@ -17,16 +17,32 @@ export class BestFansBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
         where: "BestFansBrowser:home",
-        message: error.message,
+        error: error.message,
       });
     }
   }
 
-  public async afterHome(): Promise<void> {
+  private async closeSubscriptionModal(): Promise<void> {
     try {
-      // close cookie banner dialog
+      await this.page.locator("button#pushSubscriptionPermissionModalAcceptButton").last().click({ timeout: 10000 });
+      this.logger.info("close subscription modal");
+    } catch (error: any) {
+      this.logger.info("no subscription modal");
+    }
+  }
+
+  private async closeCookieBannerModal(): Promise<void> {
+    try {
       await this.page.locator("div#cookiebanner button").last().click({ timeout: 3000 });
       this.logger.info("close cookie banner modal");
+    } catch (error: any) {
+      this.logger.info("no cookie banner modal");
+    }
+  }
+  public async afterHome(): Promise<void> {
+    try {
+      await this.closeCookieBannerModal();
+      // await this.closeSubscriptionModal();
     } catch (error: any) { }
   }
 
@@ -42,7 +58,7 @@ export class BestFansBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new BotError("captcha solve failed", {
         where: "BestFansBrowser::solveCaptcha",
-        message: error.message,
+        error: error.message,
       });
     }
   }
@@ -58,22 +74,22 @@ export class BestFansBrowser extends BaseBrowser {
       await this.page.locator("input#login-password").fill(setting.password);
       await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
 
-      // wait recaptcha and solve it
-      await this.page.locator('iframe[title="reCAPTCHA"]').first().waitFor();
-      this.logger.info("start to solve captcha...");
-      const token = await this.solveCaptcha();
+      // // wait recaptcha and solve it
+      // await this.page.locator('iframe[title="reCAPTCHA"]').first().waitFor();
+      // this.logger.info("start to solve captcha...");
+      // const token = await this.solveCaptcha();
 
-      // set recaptcha response
-      await this.page.evaluate((token) => {
-        (document.querySelector('[name="recaptcha_token_v2"]',) as HTMLTextAreaElement).value = token;
-      }, token);
+      // // set recaptcha response
+      // await this.page.evaluate((token) => {
+      //   (document.querySelector('[name="recaptcha_token_v2"]',) as HTMLTextAreaElement).value = token;
+      // }, token);
 
       // install profile response waiter
       const profilePromise = this.page.waitForResponse((response) =>
         response.request().url().includes("https://www.bestfans.com/profile/header/") && response.request().method() == "POST",
       );
       // click login button
-      await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
+      // await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
       const profileResp = await profilePromise;
       this.headers = await profileResp.request().allHeaders();
 
@@ -89,16 +105,14 @@ export class BestFansBrowser extends BaseBrowser {
         throw error;
       throw new BotError("login failed", {
         where: "BestFansBrowser:login",
-        message: error.message,
+        error: error.message,
       });
     }
   }
 
   public async afterLogin(): Promise<void> {
     try {
-      // close enable notification dialog
-      await this.page.locator("div.modal-dialog button#pushSubscriptionPermissionModalDeclineButton",).last().click({ timeout: 10000 });
-      this.logger.info("close push subscription permission modal");
+      await this.closeSubscriptionModal();
     } catch (error: any) { }
   }
 
@@ -119,7 +133,7 @@ export class BestFansBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new BotError("get earnings failed", {
         where: "BestFansBrowser::getMonthlyEarnings",
-        message: error.message,
+        error: error.message,
       });
     }
   }
@@ -146,11 +160,11 @@ export class BestFansBrowser extends BaseBrowser {
         this.page.locator("form#posting_upload div.upload-container--btn button[validation-name='uploads']").first().click(),
       ]);
       await fileChooser.setFiles(image);
-      
+
     } catch (error: any) {
       throw new BotError("create post failed", {
         where: "BestFansBrowser::createPost",
-        message: error.message,
+        error: error.message,
       })
     }
   }
