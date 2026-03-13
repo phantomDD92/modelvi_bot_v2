@@ -11,6 +11,7 @@ import { HttpStatusCode } from "axios";
 export class LoyalFansBrowser extends BaseBrowser {
 
   protected profile!: ILoyalFansProfile
+
   // constructor
   constructor(config: IBotConfig, logger: Logger) {
     super(config, logger)
@@ -32,7 +33,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new ProxyError("proxy blocked", {
         where: "LoyalFansBrowser::home",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -46,18 +46,32 @@ export class LoyalFansBrowser extends BaseBrowser {
     }
   }
 
+  private async solveCaptcha() {
+    try {
+      await this.page.solveRecaptchas();
+    } catch (error) {
+      throw new BotError("captcha solve failed", {
+        where: "LoyalFansBrowser::login"
+      }, false);
+    }
+  }
+
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
     try {
+      // set username and password
       await this.page.locator("app-homepage-login").waitFor();
-      this.logger.info("start login");
       await this.page.locator("app-homepage-login input[name='username']").fill(setting.email);
       await this.page.locator("app-homepage-login input[name='password']").fill(setting.password);
 
-      // click login
+      // click login button
       const loginPromise = this.page.waitForResponse("https://www.loyalfans.com/api/v2/auth/login?ngsw-bypass=true", { timeout: 300000 });
       await this.page.locator("app-homepage-login form > button").click();
-      await this.page.solveRecaptchas();
+
+      // solve captcha
+      await this.solveCaptcha();
       this.logger.info("solve recaptcha");
+
+      // handle login request
       const loginResp = await loginPromise;
       if (!loginResp.ok()) {
         const loginData = await loginResp.json();
@@ -66,19 +80,19 @@ export class LoyalFansBrowser extends BaseBrowser {
             where: "LoyalFansBrowser::login",
             method: "POST",
             endpoint: "https://www.loyalfans.com/api/v2/auth/login?ngsw-bypass=true",
-            params: loginResp.request().postData(),
             status: loginResp.statusText(),
             response: await loginResp.text(),
-          })
+          });
         throw new BotError("login failed", {
           where: "LoyalFansBrowser::login",
           method: "POST",
           endpoint: "https://www.loyalfans.com/api/v2/auth/login?ngsw-bypass=true",
-          params: loginResp.request().postData(),
           status: loginResp.statusText(),
           response: await loginResp.text(),
-        })
+        });
       }
+
+      // get profile
       const mePromise = this.page.waitForResponse("https://www.loyalfans.com/api/v1/auth/user/me?ngsw-bypass=true", { timeout: 120000 });
       const meResp = await mePromise;
       if (!meResp.ok())
@@ -90,6 +104,7 @@ export class LoyalFansBrowser extends BaseBrowser {
           response: await meResp.text(),
         })
       const meData = await meResp.json();
+      // finalize
       this.headers = await meResp.request().allHeaders();
       this.profile = meData.response;
       return { id: this.profile.user.uid, alias: this.profile.user.slug };
@@ -99,20 +114,17 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("login failed", {
         where: "LoyalFansBrowser::login",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
 
   public async getMonthlyEarnings(): Promise<number> {
     try {
-      const to = moment().format("YYYY-MM-DD")
-      const from = moment().subtract(30, "day").startOf("day").format("YYYY-MM-DD");
       const params = {
-        "date_from": from,
-        "date_to": to,
+        "date_from": moment().subtract(30, "day").startOf("day").format("YYYY-MM-DD"),
+        "date_to": moment().format("YYYY-MM-DD"),
         "debug": true
-      }
+      };
       const resp = await this.page.request.post("https://www.loyalfans.com/api/v2/funds/earnings/summary?ngsw-bypass=true", {
         headers: this.headers,
         data: params
@@ -125,7 +137,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("get earnings failed", {
         where: "LoyalFansBrowser::getMonthlyEarnings",
         error: error.message,
-        stack: error.stack
       });
     }
   }
@@ -145,7 +156,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("get stories failed", {
         where: "LoyalFansBrowser::getSelfStories",
         error: error.message,
-        stack: error.stack
       });
     }
   }
@@ -163,7 +173,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("delete story failed", {
         where: "LoyalFansBrowser::deleteStory",
         error: error.message,
-        stack: error.stack
       });
     }
   }
@@ -173,7 +182,7 @@ export class LoyalFansBrowser extends BaseBrowser {
     let pageToken;
     let page = 0;
     try {
-      while (true) {
+      while (page <= 5) {
         const params = {
           limit: 10,
           pageToken
@@ -186,7 +195,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         const posts: ILoyalFansPost[] = respData.timeline;
         postIds.push(...posts.map(post => post.uid));
         page += 1;
-        if (posts.length < 10 || page > 5)
+        if (posts.length < 10)
           break;
         pageToken = respData.page_token
         if (!pageToken)
@@ -199,7 +208,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("get posts failed", {
         where: "LoyalFansBrowser::getSelfPosts",
         error: error.message,
-        stack: error.stack,
       })
     }
   }
@@ -209,9 +217,9 @@ export class LoyalFansBrowser extends BaseBrowser {
     let pageToken;
     let page = 0;
     try {
-      while (true) {
+      while (page <= 5) {
         const params = {
-          limit: 4,
+          limit: 10,
           page_token: pageToken
         };
         const resp = await this.page.request.post("https://www.loyalfans.com/api/v1/timeline?ngsw-bypass=true", {
@@ -222,7 +230,7 @@ export class LoyalFansBrowser extends BaseBrowser {
         const posts: ILoyalFansPost[] = respData.timeline;
         postIds.push(...posts.filter(post => post.privacy?.privacy_rule == "public" && (post.original_content.includes("#modelvi") || post.original_content.endsWith("#creator") || post.original_content.endsWith("#sexy") || post.original_content.endsWith("#horny"))).map(post => post.uid));
         page += 1;
-        if (posts.length < 4 || page > 5)
+        if (posts.length < 10)
           break;
         pageToken = respData.page_token
         if (!pageToken)
@@ -235,7 +243,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("get posts failed", {
         where: "LoyalFansBrowser::getSelfFreePosts",
         error: error.message,
-        stack: error.stack,
       })
     }
   }
@@ -254,7 +261,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("create folder failed", {
         where: "LoyalFansBrowser::createFolder",
         error: error.message,
-        stack: error.stack,
       })
     }
   }
@@ -272,35 +278,38 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("move media failed", {
         where: "LoyalFansBrowser::moveMediaToFolder",
         error: error.message,
-        stack: error.stack,
       })
     }
   }
 
   public async uploadMedia(path: string): Promise<string> {
     try {
+      // go to media cloud
       await this.page.locator("header button.profile").click({ timeout: 120000 });
       await this.page.locator("app-menu-model > div.user-menu > div.wrapper > button", { hasText: "Media Cloud" }).waitFor();
       await this.page.locator("app-menu-model > div.user-menu > div.wrapper > button", { hasText: "Media Cloud" }).click();
       await this.page.waitForTimeout(5000);
+
+      // upload media
       await this.page.locator("app-media-cloud-modal").waitFor();
       // await this.page.locator(`app-media-cloud-modal div#${folderId}`).click();
       // await this.page.waitForTimeout(3000);
       const uploadPromise = this.page.waitForResponse("https://www.loyalfans.com/api/v2/fs/upload?ngsw-bypass=true", { timeout: 300000 });
       await this.page.locator("app-media-cloud-modal > section.header-wrapper > div.header-buttons > button", { hasText: "New" }).click();
       await this.page.locator("app-media-cloud-modal > section.header-wrapper > div.header-buttons > input.ng-star-inserted").setInputFiles(path);
-      const uploadResp = await uploadPromise;
 
+      const uploadResp = await uploadPromise;
       if (!uploadResp.ok())
         throw new BotError("upload media failed", {
           where: "LoyalFansBrowser::uploadMedia",
           method: "POST",
           endpoint: "https://www.loyalfans.com/api/v2/fs/upload?ngsw-bypass=true",
-          params: uploadResp.request().postData(),
           status: uploadResp.statusText(),
           response: await uploadResp.text()
         });
       const uploadData = await uploadResp.json();
+      
+      // wait for upload completion
       await this.page.goto("https://loyalfans.com/profile", { waitUntil: "domcontentloaded" });
       const mediaId = uploadData.file?.uid || uploadData.found?.uid;
       if (!mediaId)
@@ -308,7 +317,6 @@ export class LoyalFansBrowser extends BaseBrowser {
           where: "LoyalFansBrowser::uploadMedia",
           method: "POST",
           endpoint: "https://www.loyalfans.com/api/v2/fs/upload?ngsw-bypass=true",
-          params: uploadResp.request().postData(),
           status: uploadResp.statusText(),
           response: await uploadResp.text()
         });
@@ -319,7 +327,6 @@ export class LoyalFansBrowser extends BaseBrowser {
       throw new BotError("upload media failed", {
         where: "LoyalFansBrowser::uploadMedia",
         error: error.message,
-        stack: error.stack,
       })
     }
   }
@@ -502,7 +509,6 @@ export class LoyalFansBrowser extends BaseBrowser {
         where: `LoyalFansBrowser::${info.function}`,
         method: info.method || "GET",
         endpoint: info.endpoint || resp.url(),
-        params: info.params,
         status: resp.statusText(),
         response: await resp.text()
       })
