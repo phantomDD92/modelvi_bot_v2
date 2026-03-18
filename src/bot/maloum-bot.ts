@@ -91,11 +91,7 @@ export class MaloumBot extends PostBot {
       this.settings.params.contents.length == 0
     ) {
       this.logger.info(`account has no content to post`);
-      await this.service.updatePostResult(
-        PostResultType.SUCCESS,
-        postId,
-        deleteIds,
-      );
+      await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds,);
       return true;
     }
     const contents = this.settings.params.contents;
@@ -131,16 +127,16 @@ export class MaloumBot extends PostBot {
       const result = await this.browser.publishPost(content.title, content.postTags, mediaId, mPostType);
       if (result && result !== POST_LIMITED) {
         postId = result;
-        try {
-          const verifyResult = await this.browser.verifyPostVisibility(result, mPostType);
-          if (verifyResult.verified) {
-            this.logger.info(`VERIFY OK: ${result} is ${verifyResult.actual} (expected ${verifyResult.expected})`);
-          } else {
-            this.logger.warn(`VERIFY FAIL: ${result} is ${verifyResult.actual} (expected ${verifyResult.expected})`);
-          }
-        } catch (verifyErr:any) {
-          this.logger.info(`verify error: ${verifyErr.message}`);
-        }
+        // try {
+        //   const verifyResult = await this.browser.verifyPostVisibility(result, mPostType);
+        //   if (verifyResult.verified) {
+        //     this.logger.info(`VERIFY OK: ${result} is ${verifyResult.actual} (expected ${verifyResult.expected})`);
+        //   } else {
+        //     this.logger.warn(`VERIFY FAIL: ${result} is ${verifyResult.actual} (expected ${verifyResult.expected})`);
+        //   }
+        // } catch (verifyErr: any) {
+        //   this.logger.info(`verify error: ${verifyErr.message}`);
+        // }
       }
       if (result == POST_LIMITED) {
         await this.service.createLog({

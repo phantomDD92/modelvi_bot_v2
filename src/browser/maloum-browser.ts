@@ -924,8 +924,8 @@ export class MaloumBrowser extends BaseBrowser {
         .first()
         .click();
       const resp = await respPromise;
-      const respData = await resp.json();
       if (!resp.ok()) {
+        const respData = await resp.json();
         if (respData.statusCode == 429) return POST_LIMITED;
         throw new BotError("publish post failed", {
           where: "MaloumBrowser::publishPost",
@@ -935,7 +935,7 @@ export class MaloumBrowser extends BaseBrowser {
           response: await resp.text(),
         });
       }
-      return respData?.id || "";
+      return "";
     } catch (error: any) {
       if (error instanceof BotError) throw error;
       throw new BotError("publish post failed", {

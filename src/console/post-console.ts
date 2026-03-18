@@ -93,15 +93,15 @@ export class PostBotConsole {
         while (addCount > 0) {
           const selectedBot = runnableBots[this.position];
           if (!runningBots.includes(selectedBot._id)) {
-            // Check backoff before starting
-            const backoffRemaining = this.getBackoffDelay(selectedBot._id);
-            if (backoffRemaining > 0) {
-              const waitSec = Math.round(backoffRemaining / 1000);
-              this.logger.info(`BACKOFF ${selectedBot.alias} (${waitSec}s remaining)`);
-            }
-            else {
-              this.startBot(selectedBot);
-            }
+            // // Check backoff before starting
+            // const backoffRemaining = this.getBackoffDelay(selectedBot._id);
+            // if (backoffRemaining > 0) {
+            //   const waitSec = Math.round(backoffRemaining / 1000);
+            //   this.logger.info(`BACKOFF ${selectedBot.alias} (${waitSec}s remaining)`);
+            // }
+            // else {
+            //   this.startBot(selectedBot);
+            // }
             this.startBot(selectedBot);
             addCount--;
           }
@@ -125,18 +125,18 @@ export class PostBotConsole {
         var _a, _b;
         const processIndex = this.running_processes.findIndex(el => (el.pid == proc.pid));
         if (processIndex >= 0) {
-          const alias = (_a = this.running_processes[processIndex]) === null || _a === void 0 ? void 0 : _a.alias;
-          this.logger.notify(`CLOSE ${alias}`);
+          // const alias = (_a = this.running_processes[processIndex]) === null || _a === void 0 ? void 0 : _a.alias;
+          this.logger.notify(`CLOSE ${bot.alias}`);
           this.running_processes.splice(processIndex, 1);
-          // If bot ran for less than 5 minutes, count as a crash
-          const runDuration = Date.now() - startTime;
-          if (runDuration < 5 * 60 * 1000) {
-            this.recordCrash(bot._id, bot.alias, code);
-            this.logger.notify(`RECORD CRASH ${bot.alias}`);
-          } else {
-            // Bot ran long enough - reset crash counter
-            this.clearCrashHistory(bot._id);
-          }
+          // // If bot ran for less than 5 minutes, count as a crash
+          // const runDuration = Date.now() - startTime;
+          // if (runDuration < 5 * 60 * 1000) {
+          //   this.recordCrash(bot._id, bot.alias, code);
+          //   this.logger.notify(`RECORD CRASH ${bot.alias}`);
+          // } else {
+          //   // Bot ran long enough - reset crash counter
+          //   this.clearCrashHistory(bot._id);
+          // }
         }
       })
     }
