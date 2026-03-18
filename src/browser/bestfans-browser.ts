@@ -240,6 +240,103 @@ export class BestFansBrowser extends BaseBrowser {
     }
   }
 
+  public async schedulePost(scheduleAt: Date, title: string, image: string, postType?: number, postPrice?: number): Promise<void> {
+    try {
+      await this.closeSubscriptionModal();
+      // go to dashboard page
+      await this.page.goto(`https://www.bestfans.com/${this.profile.alias}`, { waitUntil: "domcontentloaded", });
+
+      // click create-post button
+      await this.page.waitForTimeout(3000);
+      await this.page.locator("div.main-container > section.cta-section a.btn").first().click();
+
+      // click reset button
+      await this.page.locator("form#posting_upload div.posting-configuration--navigation button#post_reset_button").first().click();
+
+      // set post title
+      await this.page.waitForTimeout(3000);
+      await this.page.locator("form#posting_upload textarea#post-create-textarea").first().fill(title);
+
+      // select time
+      await this.page.locator("form#posting_upload div#configuration_btns button").first().click();
+      await this.page.waitForSelector("form#time_settings_form");
+      const timestamp = scheduleAt.getTime().toString();
+      await this.page.evaluate((ts) => {
+        const input = document.querySelector('#datetimepicker1Input') as HTMLInputElement;
+        input.setAttribute('value', ts);
+        input.value = ts;
+        input.setAttribute('data-value', ts);
+      }, timestamp);
+      await this.page.waitForTimeout(6000);
+      await this.page.locator("form#time_settings_form button.btn--submit").last().click();
+      this.logger.info("set schedule time");
+
+      // set post type
+      switch (postType) {
+        case PostType.FANS:
+          await this.page.locator("form#posting_upload div#configuration_btns button").last().click();
+          await this.page.selectOption("#subscribed_price_EUR", { value: "" });
+          await this.page.locator("form#tags_form button.btn--submit").last().click();
+          break;
+        case PostType.PAID:
+          if (!postPrice)
+            throw new BotError("price absent for paid posting");
+          const price = this.findProperPrice(postPrice);
+          await this.page.locator("form#posting_upload div#configuration_btns button").last().click();
+          await this.page.selectOption("#subscribed_price_EUR", { value: price.toFixed(4) });
+          await this.page.locator("form#tags_form button.btn--submit").last().click();
+          break;
+        default:
+          await this.page.locator("form#posting_upload div#configuration_btns button").last().click();
+          await this.page.locator("form#tags_form input#free").first().click();
+          await this.page.locator("form#tags_form button.btn--submit").last().click();
+          break;
+      }
+      this.logger.info("set post type");
+      // upload image
+      const uploadPromise = this.page.waitForResponse("https://www.bestfans.com/file/upload", { timeout: 120000 });
+      const [fileChooser] = await Promise.all([
+        this.page.waitForEvent("filechooser"),
+        this.page.locator("form#posting_upload div.upload-container--btn button[validation-name='uploads']").first().click(),
+      ]);
+      await fileChooser.setFiles(image);
+      const uploadResp = await uploadPromise;
+      if (!uploadResp.ok()) {
+        throw new BotError("upload media failed", {
+          where: "BestFansBrowser::schedulePost",
+          endpoint: "https://www.bestfans.com/file/upload",
+          method: "POST",
+          status: uploadResp.statusText(),
+          response: await uploadResp.text(),
+        });
+      }
+      const uploadData: IBestfansUpload = await uploadResp.json();
+      this.logger.info(`upload image(${uploadData.fileData?.id})`);
+
+      // unlock comment lockr
+      await this.page.locator("form#posting_upload input#comments_locked").first().check();
+
+      // click save button
+      const storePromise = this.page.waitForResponse("https://www.bestfans.com/post/store");
+      await this.page.locator("form#posting_upload div.posting-configuration--navigation button[type='submit']").first().click();
+      const storeResp = await storePromise;
+      if (!storeResp.ok()) {
+        throw new BotError("schedule post failed", {
+          where: "BestFansBrowser::schedulePost",
+          endpoint: "https://www.bestfans.com/post/store",
+          method: "POST",
+          status: uploadResp.statusText(),
+          response: await uploadResp.text(),
+        });
+      }
+    } catch (error: any) {
+      throw new BotError("schedule post failed", {
+        where: "BestFansBrowser::schedulePost",
+        message: error.message,
+      })
+    }
+  }
+
   private findProperPrice(price: number) {
     const PRICE_PLANS: number[] = [1.9500, 2.9500, 3.9500, 4.9500, 5.9500, 6.9500, 7.9500, 8.9500, 9.9500, 10.9500,
       11.9500, 12.9500, 13.9500, 14.9500, 15.9500, 16.9500, 17.9500, 18.9500, 19.9500, 20.9500,
