@@ -1,6 +1,7 @@
 import { BestFansBrowser } from '../browser/bestfans-browser';
 import { FakePostService } from '../services/fake-service';
 import { PostApiService } from '../services/post-service';
+import { PostType } from '../types/constant';
 import { IBotConfig } from '../types/interface';
 import { Logger } from '../utils/logger';
 import { PostBot } from './post-bot';
@@ -68,14 +69,14 @@ export class BestFansBot extends PostBot {
   // bot action for testing
   protected async doTest(): Promise<boolean> {
     try {
-      await this.browser.waitForTimeout(10000);
-      const revenue = await this.browser.getMonthlyEarnings();
-      console.log("Revenue :", revenue);
-      const contents = this.settings.params?.contents;
-      if (!contents || contents.length == 0)
-        return true;
+      // await this.browser.waitForTimeout(10000);
+      // const revenue = await this.browser.getMonthlyEarnings();
+      // console.log("Revenue :", revenue);
+      // const contents = this.settings.params?.contents;
+      // if (!contents || contents.length == 0)
+      //   return true;
       // const content = contents[0];
-      // await this.browser.createPost("I don’t fake reactions. Ever.");
+      await this.browser.createPost("I don’t fake reactions. Ever.", "c:/1.webp", PostType.PAID, 5);
       return true;
     } catch (error: any) {
       console.error(error)
