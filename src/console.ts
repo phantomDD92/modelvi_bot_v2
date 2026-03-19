@@ -25,6 +25,7 @@ if (![
   Platform.LOYALFANS,
   Platform.FETLIFE,
   Platform.MYMFANS,
+  Platform.BESTFANS,
   Platform.FANLIKE
 ].includes(program.args[0])) {
   console.warn(`Please specify the correct platform for bot console.\nex: node console (F2F|FNC|FAN|KNKY|MALOUM|FANVUE|ONLYFANS|MYMFANS)`);
@@ -84,6 +85,7 @@ process.on('SIGTSTP', async () => {
     case Platform.FOURBASED:
     case Platform.FETLIFE:
     case Platform.LOYALFANS:
+    case Platform.BESTFANS:
       botConsole = new PostBotConsole(config, logger)
       break
     case Platform.FANLIKE:
