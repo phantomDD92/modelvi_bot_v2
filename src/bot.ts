@@ -39,10 +39,10 @@ let config: IBotConfig = {
   image_root: process.env.IMAGE_ROOT || "https://modelvi.com",
   console_log: process.env.CONSOLE_LOG == "true",
   channel_notify: process.env.DISCORD_WEBHOOK_NOTIFY,
-  // debug: opts.debug,
-  // force: opts.force,
-  debug: true,
-  force: true,
+  debug: opts.debug,
+  force: opts.force,
+  // debug: true,
+  // force: true,
 };
 
 const logger: Logger = new Logger(config);
