@@ -250,7 +250,7 @@ export class BestFansBrowser extends BaseBrowser {
     }
   }
 
-  public async schedulePost(scheduleAt: Date, title: string, image: string, postType?: number, postPrice?: number): Promise<void> {
+  public async schedulePost(scheduleAt: Date, title: string, images: string[], postType?: number, postPrice?: number): Promise<void> {
     try {
       // go to dashboard page
       await this.page.goto(`https://www.bestfans.com/${this.profile.alias}`, { waitUntil: "domcontentloaded", });
@@ -315,7 +315,7 @@ export class BestFansBrowser extends BaseBrowser {
         this.page.waitForEvent("filechooser"),
         this.page.locator("form#posting_upload div.upload-container--btn button[validation-name='uploads']").first().click(),
       ]);
-      await fileChooser.setFiles(image);
+      await fileChooser.setFiles(images);
       const uploadResp = await uploadPromise;
       if (!uploadResp.ok()) {
         throw new BotError("upload media failed", {

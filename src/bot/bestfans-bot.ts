@@ -1,8 +1,8 @@
 import { BestFansBrowser } from '../browser/bestfans-browser';
-import { FakePostService } from '../services/fake-service';
 import { PostApiService } from '../services/post-service';
-import { ActionType, PostResultType, PostType } from '../types/constant';
-import { IBotConfig, IContent } from '../types/interface';
+import { ActionType, PostResultType, ScheduleStatus } from '../types/constant';
+import { IBotConfig, IContent, ISchedulePost } from '../types/interface';
+import { BotError } from '../utils/error';
 import { Logger } from '../utils/logger';
 import { PostBot } from './post-bot';
 
@@ -72,8 +72,50 @@ export class BestFansBot extends PostBot {
     return false;
   }
 
-  protected needSchedule(): boolean {
-    return false
+  private async publishSchedule(post: ISchedulePost): Promise<void> {
+    const schedule = post.schedule;
+    try {
+      let mediaPaths = []
+      for (var medium of schedule.medias) {
+        const mediaPath = await this.downloadFile(medium.name);
+        mediaPaths.push(mediaPath);
+      }
+      if (mediaPaths.length == 0)
+        throw new BotError("publish schedule failed", {
+          where: "FancentroBot::publishSchedule",
+          error: "no media uploaded"
+        });
+      await this.browser.schedulePost(new Date(post.scheduledAt), schedule.title, mediaPaths, schedule.type, schedule.price);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${mediaPaths.length}/${schedule.medias.length} images, ${schedule.title})` });
+      await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.SCHEDULED })
+    } catch (error) {
+      this.logger.notifyError(error);
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})` });
+      await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error" })
+    }
+  }
+
+  protected async doSchedule(): Promise<boolean> {
+    try {
+      // update next schedule time and get schedule list
+      const schedules = await this.service.updateScheduleSetting();
+      const waitingSchedules = schedules.filter(schedule => schedule.status == ScheduleStatus.WAITING);
+      const scheduledSchedules = schedules.filter(schedule => schedule.status == ScheduleStatus.SCHEDULED);
+      this.logger.info(`waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`);
+      let count = 0;
+      // schedule waiting schedules
+      for (var schedule of waitingSchedules) {
+        await this.publishSchedule(schedule);
+        count += 1;
+        if (count >= 2)
+          break;
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.notifyError(error);
+      return false;
+    }
   }
 
   protected async doCalibrate(): Promise<boolean> {
