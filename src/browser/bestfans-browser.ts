@@ -145,12 +145,13 @@ export class BestFansBrowser extends BaseBrowser {
 
   public async createPost(title: string, image: string, postType?: number, postPrice?: number): Promise<void> {
     try {
-      await this.closeSubscriptionModal();
+
       // go to dashboard page
       await this.page.goto(`https://www.bestfans.com/${this.profile.alias}`, { waitUntil: "domcontentloaded", });
+      await this.page.waitForTimeout(3000);
+      await this.closeSubscriptionModal();
 
       // click create-post button
-      await this.page.waitForTimeout(3000);
       await this.page.locator("div.main-container > section.cta-section a.btn").first().click();
 
       // click reset button
@@ -160,19 +161,11 @@ export class BestFansBrowser extends BaseBrowser {
       await this.page.waitForTimeout(3000);
       await this.page.locator("form#posting_upload textarea#post-create-textarea").first().fill(title);
 
-      // select time
-      await this.page.locator("form#posting_upload div#configuration_btns button").first().click();
-      await this.page.waitForSelector("form#time_settings_form");
-      const timestamp = new Date('2026-03-30T20:55:00').getTime().toString();
-      await this.page.evaluate((ts) => {
-        const input = document.querySelector('#datetimepicker1Input') as HTMLInputElement;
-        input.setAttribute('value', ts);
-        input.value = ts;
-        input.setAttribute('data-value', ts);
-      }, timestamp);
-      await this.page.waitForTimeout(6000);
+      // set posting period
+      await this.page.locator("form#posting_upload div#configuration_btns button").nth(1).click();
+      await this.page.locator("form#time_settings_form label.radio-block").nth(1).click();
       await this.page.locator("form#time_settings_form button.btn--submit").last().click();
-      this.logger.info("set schedule time");
+      this.logger.info("set time period");
 
       // set post type
       switch (postType) {
@@ -217,9 +210,26 @@ export class BestFansBrowser extends BaseBrowser {
       this.logger.info(`upload image(${uploadData.fileData?.id})`);
 
       // unlock comment lockr
-      await this.page.locator("form#posting_upload input#comments_locked").first().check();
+      // await this.page.locator("form#posting_upload input#comments_locked").first().check();
 
       // click save button
+      // const storePromise = this.page.waitForResponse(async (resp) => {
+      //   if (resp.request().method().toUpperCase() == "GET")
+      //     return false;
+      //   console.log(`${resp.request().method()} : ${resp.request().url()}`);
+      //   try {
+
+      //     const text = await resp.text();
+      //     console.log("### : ", text.substring(0, 100));
+      //     console.log("$$$ : ", resp.request().postData());
+      //   }
+      //   catch (error) {
+      //     console.error(error);
+      //   }
+      //   if (resp.request().url().includes("/content-impressions/create"))
+      //     return true;
+      //   return false;
+      // });
       const storePromise = this.page.waitForResponse("https://www.bestfans.com/post/store");
       await this.page.locator("form#posting_upload div.posting-configuration--navigation button[type='submit']").first().click();
       const storeResp = await storePromise;
@@ -242,12 +252,12 @@ export class BestFansBrowser extends BaseBrowser {
 
   public async schedulePost(scheduleAt: Date, title: string, image: string, postType?: number, postPrice?: number): Promise<void> {
     try {
-      await this.closeSubscriptionModal();
       // go to dashboard page
       await this.page.goto(`https://www.bestfans.com/${this.profile.alias}`, { waitUntil: "domcontentloaded", });
+      await this.page.waitForTimeout(3000);
+      await this.closeSubscriptionModal();
 
       // click create-post button
-      await this.page.waitForTimeout(3000);
       await this.page.locator("div.main-container > section.cta-section a.btn").first().click();
 
       // click reset button
@@ -263,11 +273,17 @@ export class BestFansBrowser extends BaseBrowser {
       const timestamp = scheduleAt.getTime().toString();
       await this.page.evaluate((ts) => {
         const input = document.querySelector('#datetimepicker1Input') as HTMLInputElement;
-        input.setAttribute('value', ts);
         input.value = ts;
-        input.setAttribute('data-value', ts);
+        input.setAttribute('value', ts);
+        console.log("### : ", input.getAttribute('value'));
       }, timestamp);
-      await this.page.waitForTimeout(6000);
+      await this.page.waitForTimeout(1000);
+      await this.page.evaluate((ts) => {
+        const input = document.querySelector('#datetimepicker1Input') as HTMLInputElement;
+        input.value = ts;
+        input.setAttribute('value', ts);
+        console.log("$$$ : ", input.getAttribute('value'));
+      }, timestamp);
       await this.page.locator("form#time_settings_form button.btn--submit").last().click();
       this.logger.info("set schedule time");
 
@@ -303,7 +319,7 @@ export class BestFansBrowser extends BaseBrowser {
       const uploadResp = await uploadPromise;
       if (!uploadResp.ok()) {
         throw new BotError("upload media failed", {
-          where: "BestFansBrowser::schedulePost",
+          where: "BestFansBrowser::createPost",
           endpoint: "https://www.bestfans.com/file/upload",
           method: "POST",
           status: uploadResp.statusText(),
@@ -313,16 +329,12 @@ export class BestFansBrowser extends BaseBrowser {
       const uploadData: IBestfansUpload = await uploadResp.json();
       this.logger.info(`upload image(${uploadData.fileData?.id})`);
 
-      // unlock comment lockr
-      await this.page.locator("form#posting_upload input#comments_locked").first().check();
-
-      // click save button
       const storePromise = this.page.waitForResponse("https://www.bestfans.com/post/store");
       await this.page.locator("form#posting_upload div.posting-configuration--navigation button[type='submit']").first().click();
       const storeResp = await storePromise;
       if (!storeResp.ok()) {
-        throw new BotError("schedule post failed", {
-          where: "BestFansBrowser::schedulePost",
+        throw new BotError("create post failed", {
+          where: "BestFansBrowser::createPost",
           endpoint: "https://www.bestfans.com/post/store",
           method: "POST",
           status: uploadResp.statusText(),
@@ -330,8 +342,8 @@ export class BestFansBrowser extends BaseBrowser {
         });
       }
     } catch (error: any) {
-      throw new BotError("schedule post failed", {
-        where: "BestFansBrowser::schedulePost",
+      throw new BotError("create post failed", {
+        where: "BestFansBrowser::createPost",
         message: error.message,
       })
     }
