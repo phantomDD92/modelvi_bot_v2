@@ -1,11 +1,15 @@
+import moment from "moment";
 import { PostBot } from "./post-bot";
+import { F2fBrowser } from "../browser/f2f-browser";
+import { PostApiService } from "../services/post-service";
+import { Logger } from "../utils/logger";
+import { SessionTimeoutError } from "../utils/error";
 import {
   ActionType,
   DEFAULT_LIVING_POSTS,
   DEFAULT_STORY_MAX_COUNT,
   F2FStoryType,
   PostResultType,
-  PostType,
   ScheduleStatus,
 } from "../types/constant";
 import {
@@ -17,11 +21,6 @@ import {
   ISchedulePost,
   IScheduleResult,
 } from "../types/interface";
-import { F2fBrowser } from "../browser/f2f-browser";
-import { Logger } from "../utils/logger";
-import { PostApiService } from "../services/post-service";
-import moment from "moment";
-import { SessionTimeoutError } from "../utils/error";
 
 export class F2fBot extends PostBot {
   // headless browser for f2f bot
@@ -54,19 +53,16 @@ export class F2fBot extends PostBot {
 
   private async removePosts(): Promise<string[]> {
     // Check if auto-delete is enabled
-    if (this.settings.params?.autoDelete === false) return [];
+    if (this.settings.params?.autoDelete === false)
+      return [];
     try {
       // get all free posts
       const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
       const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       const postRemains = this.settings.params?.postRemains || [];
       const postIds: string[] = await this.browser.getSelfPosts();
-      const postsPublished = postIds.filter((postId) =>
-        postRemains.includes(postId),
-      );
-      this.logger.info(
-        `submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`,
-      );
+      const postsPublished = postIds.filter((postId) => postRemains.includes(postId),);
+      this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`,);
       const deleteIds = [];
       while (postsPublished.length > postCount && deleteIds.length < maxDelete) {
         const postDeleting = postsPublished.pop();
@@ -110,10 +106,7 @@ export class F2fBot extends PostBot {
     return mediaId;
   }
 
-  private async uploadMedia(
-    folderName: string,
-    media: IMedia[],
-  ): Promise<string[]> {
+  private async uploadMedia(folderName: string, media: IMedia[],): Promise<string[]> {
     const folderId = await this.getFolder(folderName);
     const mediaId: string[] = [];
     for (var medium of media) {
@@ -142,99 +135,41 @@ export class F2fBot extends PostBot {
     try {
       deleteIds = await this.removePosts();
       if (deleteIds.length > 0) {
-        await this.service.createLog({
-          success: true,
-          action: ActionType.POST,
-          message: `delete ${deleteIds.length} posts`,
-          targets: deleteIds,
-        });
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds, });
       }
       // first check media
       if (!media.name) {
-        await this.service.createLog({
-          success: true,
-          action: ActionType.POST,
-          message: `skip to create ${postIndex + 1}st post(${content.title})`,
-        });
-        await this.service.updatePostResult(
-          PostResultType.PROHIBITED,
-          undefined,
-          deleteIds,
-        );
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `skip to create ${postIndex + 1}st post(${content.title})`, });
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, deleteIds,);
         return true;
       }
       // open content media
       const mediaId = await this.getMedia(content.folder, media);
       if (media.uuid != mediaId) {
         await this.service.updateContentMedia(postIndex, mediaId);
-        await this.service.createLog({
-          success: true,
-          action: ActionType.POST,
-          message: `upload ${postIndex + 1}st media(${content.title})`,
-          target: mediaId,
-        });
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId, });
       }
       // create a post
       const postId = await this.browser.createEmptyPost([mediaId]);
-      let success = await this.browser.setPostTitle(
-        postId,
-        content.title,
-        content.postTags,
-      );
+      let success = await this.browser.setPostTitle(postId, content.title, content.postTags,);
       if (!success) {
-        await this.service.createLog({
-          success: false,
-          action: ActionType.POST,
-          message: `prohibited to create ${postIndex + 1}st post(${content.title})`,
-          target: postId,
-        });
-        await this.service.updatePostResult(
-          PostResultType.PROHIBITED,
-          undefined,
-          deleteIds,
-        );
+        await this.service.createLog({ success: false, action: ActionType.POST, message: `prohibited to create ${postIndex + 1}st post(${content.title})`, target: postId, });
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, deleteIds,);
         return true;
       }
       success = await this.browser.publishPost(postId);
       if (!success) {
-        await this.service.createLog({
-          success: false,
-          action: ActionType.POST,
-          message: `limited to create ${postIndex + 1}st post(${content.title})`,
-          target: postId,
-        });
-        await this.service.updatePostResult(
-          PostResultType.SUCCESS,
-          undefined,
-          deleteIds,
-          moment().add(1, "day").startOf("day").toDate(),
-        );
+        await this.service.createLog({ success: false, action: ActionType.POST, message: `limited to create ${postIndex + 1}st post(${content.title})`, target: postId, });
+        await this.service.updatePostResult(PostResultType.SUCCESS, undefined, deleteIds, moment().add(1, "day").startOf("day").toDate(),);
         return true;
       }
-      await this.service.createLog({
-        success: true,
-        action: ActionType.POST,
-        message: `create ${postIndex + 1}st post(${content.title})`,
-        target: postId,
-      });
-      await this.service.updatePostResult(
-        PostResultType.SUCCESS,
-        postId,
-        deleteIds,
-      );
+      await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId, });
+      await this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds,);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
-      await this.service.updatePostResult(
-        PostResultType.FAILED,
-        undefined,
-        deleteIds,
-      );
-      await this.service.createLog({
-        success: false,
-        action: ActionType.POST,
-        message: `failed to create ${postIndex + 1}st post(${content.title})`,
-      });
+      await this.service.updatePostResult(PostResultType.FAILED, undefined, deleteIds,);
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})`, });
       return false;
     }
   }
@@ -269,13 +204,7 @@ export class F2fBot extends PostBot {
       const revenue = await this.browser.getMonthlyEarnings();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createLog({
-          success: false,
-          action: ActionType.LOGIN,
-          message: `bot closed due to no balance`,
-          error: "no balance",
-          notified: true,
-        });
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true, });
       return available;
     } catch (error: any) {
       if (error instanceof SessionTimeoutError) await this.refreshSession();
@@ -294,9 +223,7 @@ export class F2fBot extends PostBot {
 
   private async getUnreadMessages(): Promise<IChatMessage[]> {
     const chats = await this.browser.getChats();
-    const unreadChats = chats.filter(
-      (item) => item.unread_message_count > 0 && item.message.received,
-    );
+    const unreadChats = chats.filter((item) => item.unread_message_count > 0 && item.message.received,);
     return unreadChats.map((item) => ({
       user: item.custom_chat_name,
       message: item.message.content,
@@ -315,20 +242,12 @@ export class F2fBot extends PostBot {
       this.logger.info(`no published posts among ${postIds.length} posts`);
       return [];
     }
-    const publishedPosts = postIds.filter((postId) =>
-      schedulePostIds.includes(postId),
-    );
+    const publishedPosts = postIds.filter((postId) => schedulePostIds.includes(postId),);
     const results = publishedPosts.map((postId) => {
       const schedule = schedules.find((element) => element.post == postId);
-      return {
-        id: schedule?._id,
-        post: schedule?.post,
-        status: ScheduleStatus.FINISHED,
-      };
+      return { id: schedule?._id, post: schedule?.post, status: ScheduleStatus.FINISHED, };
     });
-    this.logger.info(
-      `${results.length} published posts among ${postIds.length} posts`,
-    );
+    this.logger.info(`${results.length} published posts among ${postIds.length} posts`,);
     return results;
   }
 
@@ -336,82 +255,31 @@ export class F2fBot extends PostBot {
     try {
       let success;
       // const mediaId = await this.getMedia(post.schedule.folder, post.schedule.media);
-      const mediaIds = await this.uploadMedia(
-        post.schedule.folder,
-        post.schedule.medias,
-      );
-      this.logger.info(
-        `upload media for schedule post(${post.schedule.title})`,
-      );
+      const mediaIds = await this.uploadMedia(post.schedule.folder, post.schedule.medias,);
+      this.logger.info(`upload media for schedule post(${post.schedule.title})`,);
       const postId = await this.browser.createEmptyPost(mediaIds);
       this.logger.info(`create schedule post(${postId})`);
-      success = await this.browser.setPostTitle(
-        postId,
-        post.schedule.title,
-        post.schedule.tags,
-      );
+      success = await this.browser.setPostTitle(postId, post.schedule.title, post.schedule.tags,);
       if (!success) {
-        await this.service.createLog({
-          success: false,
-          action: ActionType.SCHEDULE,
-          message: `prohibited to create schedule post(${post.schedule.title})`,
-        });
-        await this.service.updateScheduleResult({
-          id: post._id,
-          post: postId,
-          status: ScheduleStatus.FAILED,
-          reason: "prohibited",
-        });
+        await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `prohibited to create schedule post(${post.schedule.title})`, });
+        await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.FAILED, reason: "prohibited", });
         return;
       }
       this.logger.info(`set post title(${post.schedule.title})`);
-      await this.browser.setPostPrice(
-        postId,
-        post.schedule.type,
-        post.schedule.price,
-      );
+      await this.browser.setPostPrice(postId, post.schedule.type, post.schedule.price,);
       this.logger.info(`set post price`);
-      success = await this.browser.schedulePost(
-        postId,
-        new Date(post.scheduledAt),
-      );
+      success = await this.browser.schedulePost(postId, new Date(post.scheduledAt),);
       if (!success) {
-        await this.service.createLog({
-          success: false,
-          action: ActionType.SCHEDULE,
-          message: `limited to create schedule post(${post.schedule.title})`,
-        });
-        await this.service.updateScheduleResult({
-          id: post._id,
-          post: postId,
-          status: ScheduleStatus.FAILED,
-          reason: "rate limited",
-        });
+        await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `limited to create schedule post(${post.schedule.title})`, });
+        await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.FAILED, reason: "rate limited", });
         return;
       }
-      await this.service.createLog({
-        success: true,
-        action: ActionType.SCHEDULE,
-        message: `create schedule post(${post.schedule.title})`,
-        target: postId,
-      });
-      await this.service.updateScheduleResult({
-        id: post._id,
-        post: postId,
-        status: ScheduleStatus.SCHEDULED,
-      });
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${post.schedule.title})`, target: postId, });
+      await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED, });
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createLog({
-        success: false,
-        action: ActionType.SCHEDULE,
-        message: `failed to create schedule post(${post.schedule.title})`,
-      });
-      await this.service.updateScheduleResult({
-        id: post._id,
-        status: ScheduleStatus.FAILED,
-        reason: "internal error",
-      });
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${post.schedule.title})`, });
+      await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error", });
     }
   }
 
@@ -420,15 +288,9 @@ export class F2fBot extends PostBot {
       let results: IScheduleResult[] = [];
       // update next schedule time and get schedule list
       const schedules = await this.service.updateScheduleSetting();
-      const waitingSchedules = schedules.filter(
-        (schedule) => schedule.status == ScheduleStatus.WAITING,
-      );
-      const scheduledSchedules = schedules.filter(
-        (schedule) => schedule.status == ScheduleStatus.SCHEDULED,
-      );
-      this.logger.info(
-        `waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`,
-      );
+      const waitingSchedules = schedules.filter((schedule) => schedule.status == ScheduleStatus.WAITING,);
+      const scheduledSchedules = schedules.filter((schedule) => schedule.status == ScheduleStatus.SCHEDULED,);
+      this.logger.info(`waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`,);
       // check published schedules
       if (scheduledSchedules.length > 0)
         results = await this.checkPublishedSchedules(scheduledSchedules);
@@ -469,11 +331,7 @@ export class F2fBot extends PostBot {
         }
       }
       if (countDeleted > 0) {
-        await this.service.createLog({
-          success: true,
-          action: ActionType.STORY,
-          message: `delete ${countDeleted} stories`,
-        });
+        await this.service.createLog({ success: true, action: ActionType.STORY, message: `delete ${countDeleted} stories`, });
       }
       // find next story content
       if (storyIndex >= contents.length) storyIndex = 0;
@@ -481,11 +339,7 @@ export class F2fBot extends PostBot {
       let content;
       while (index != storyIndex) {
         const contentChecked = contents[index];
-        if (
-          contentChecked.f2fStoryType &&
-          contentChecked.f2fStoryType > F2FStoryType.NONE &&
-          contentChecked.media[0].name
-        ) {
+        if (contentChecked.f2fStoryType && contentChecked.f2fStoryType > F2FStoryType.NONE && contentChecked.media[0].name) {
           content = contents[index];
           storyIndex = index;
           break;
@@ -501,31 +355,15 @@ export class F2fBot extends PostBot {
       const mediaId = await this.getMedia(content.folder, media);
       if (media.uuid != mediaId) {
         await this.service.updateContentMedia(storyIndex, mediaId);
-        await this.service.createLog({
-          success: true,
-          action: ActionType.STORY,
-          message: `upload ${storyIndex + 1}st story media`,
-        });
+        await this.service.createLog({ success: true, action: ActionType.STORY, message: `upload ${storyIndex + 1}st story media`, });
       }
       // create story
-      const storyId = await this.browser.createStory(
-        mediaId,
-        content.f2fStoryType || F2FStoryType.PUBLIC,
-      );
-      await this.service.createLog({
-        success: true,
-        action: ActionType.STORY,
-        message: `create ${storyIndex + 1}th story`,
-        target: storyId,
-      });
+      const storyId = await this.browser.createStory(mediaId, content.f2fStoryType || F2FStoryType.PUBLIC,);
+      await this.service.createLog({ success: true, action: ActionType.STORY, message: `create ${storyIndex + 1}th story`, target: storyId, });
       await this.service.updateStorySetting(storyIndex);
       return true;
     } catch (error) {
-      await this.service.createLog({
-        success: false,
-        action: ActionType.STORY,
-        message: `failed to create ${storyIndex + 1}th story`,
-      });
+      await this.service.createLog({ success: false, action: ActionType.STORY, message: `failed to create ${storyIndex + 1}th story`, });
       await this.service.updateStorySetting(storyIndex);
       this.logger.notifyError(error);
       return false;
@@ -542,11 +380,7 @@ export class F2fBot extends PostBot {
       this.logger.info(`find ${unreadChats.length} unread chats`);
       for (var chat of unreadChats) {
         const message = chat.message;
-        if (
-          message.received &&
-          !message.read &&
-          message.message_type == "text"
-        ) {
+        if (message.received && !message.read && message.message_type == "text") {
           messages.push({
             user: chat.custom_chat_name || chat.title,
             message: message.content,
