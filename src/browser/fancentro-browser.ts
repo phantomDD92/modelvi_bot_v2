@@ -5,6 +5,7 @@ import { IFancentroFeed, IFancentroLabel, IFancentroPost, IFancentroProfile, IFa
 import { IAccountID, IAccountSettings, IBotConfig } from "../types/interface";
 import { AuthError, BotError, ProxyError, SessionTimeoutError } from "../utils/error";
 import { Logger } from "../utils/logger";
+import { HttpStatusCode } from "axios";
 
 export class FancentroBrowser extends BaseBrowser {
 
@@ -657,7 +658,11 @@ export class FancentroBrowser extends BaseBrowser {
         headers: this.apiHeader,
         params: { page: 1, page_size: 22, sorting: "newest", filter: "public", source: "discover", type: "post" }
       });
-      if (!resp.ok())
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FancentroBrowser::getFeed"
+          });
         throw new BotError("get feed failed", {
           where: "FancentroBrowser::getFeed",
           method: "GET",
@@ -665,14 +670,13 @@ export class FancentroBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: await resp.text()
         })
+      }
       const respData = await resp.json();
       const feeds = respData.data || [];
       return feeds;
     }
     catch (error: any) {
       if (error instanceof BotError)
-        throw error;
-      if (error instanceof SessionTimeoutError)
         throw error;
       throw new BotError("get feed failed", {
         where: "FancentroBrowser::getFeed",
@@ -689,6 +693,10 @@ export class FancentroBrowser extends BaseBrowser {
         data: { post_id: postId, comment }
       });
       if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FancentroBrowser::commentPost"
+          });
         throw new BotError("comment post failed", {
           where: "FancentroBrowser::commentPost",
           method: "POST",
@@ -697,7 +705,7 @@ export class FancentroBrowser extends BaseBrowser {
           response: await resp.text()
         });
       }
-      const respData = await resp.json();
+      // const respData = await resp.json();
       return;
     }
     catch (error: any) {
@@ -716,6 +724,10 @@ export class FancentroBrowser extends BaseBrowser {
         data: { contentId: postId, contentType: "post" }
       });
       if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FancentroBrowser::likePost"
+          });
         throw new BotError("like post failed", {
           where: "FancentroBrowser::likePost",
           method: "POST",
@@ -731,6 +743,31 @@ export class FancentroBrowser extends BaseBrowser {
       if (error instanceof BotError) throw error;
       throw new BotError("like post failed", {
         where: "FancentroBrowser::likePost",
+        error: error.message,
+      });
+    }
+  }
+
+  public async refreshApiSession() {
+    try {
+      const viewPromise = this.page.waitForResponse("https://fancentro.com/api/v1/api/viewData");
+      await this.page.goto(`https://fancentro.com/${this.profile.alias}`);
+      const viewResp = await viewPromise;
+      if (!viewResp.ok()) {
+        throw new BotError("refresh session failed", {
+          where: "FancentroBrowser::refreshApiSession",
+          method: "GET",
+          endpoint: "https://fancentro.com/api/v1/api/viewData",
+          status: viewResp.statusText(),
+        });
+      }
+      this.apiHeader = await viewResp.request().allHeaders();
+      this.logger.info("refresh api session");
+    } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
+      throw new BotError("refresh session failed", {
+        where: "FancentroBrowser::refreshApiSession",
         error: error.message,
       });
     }
