@@ -658,7 +658,11 @@ export class FancentroBrowser extends BaseBrowser {
         headers: this.apiHeader,
         params: { page: 1, page_size: 22, sorting: "newest", filter: "public", source: "discover", type: "post" }
       });
-      if (!resp.ok())
+      if (!resp.ok()) {
+        if (resp.status() == HttpStatusCode.Unauthorized)
+          throw new SessionTimeoutError("session timeout", {
+            where: "FancentroBrowser::getFeed"
+          });
         throw new BotError("get feed failed", {
           where: "FancentroBrowser::getFeed",
           method: "GET",
@@ -666,14 +670,13 @@ export class FancentroBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: await resp.text()
         })
+      }
       const respData = await resp.json();
       const feeds = respData.data || [];
       return feeds;
     }
     catch (error: any) {
       if (error instanceof BotError)
-        throw error;
-      if (error instanceof SessionTimeoutError)
         throw error;
       throw new BotError("get feed failed", {
         where: "FancentroBrowser::getFeed",
@@ -692,7 +695,7 @@ export class FancentroBrowser extends BaseBrowser {
       if (!resp.ok()) {
         if (resp.status() == HttpStatusCode.Unauthorized)
           throw new SessionTimeoutError("session timeout", {
-            where: "FancentroBrowser::likePost"
+            where: "FancentroBrowser::commentPost"
           });
         throw new BotError("comment post failed", {
           where: "FancentroBrowser::commentPost",
