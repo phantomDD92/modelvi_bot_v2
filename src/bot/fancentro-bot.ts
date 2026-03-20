@@ -204,8 +204,8 @@ export class FancentroBot extends PostBot {
 
   public async doTest(): Promise<boolean> {
     try {
-      await this.refreshSession();
-      await this.doComment();
+      // await this.refreshSession();
+      // await this.doComment();
       return true;
     } catch (error: any) {
       console.error(error);
@@ -214,10 +214,10 @@ export class FancentroBot extends PostBot {
   }
 
   protected needTest(): boolean {
-    if (!this.tested) {
-      this.tested = true
-      return true;
-    }
+    // if (!this.tested) {
+    //   this.tested = true
+    //   return true;
+    // }
     return false;
   }
 
