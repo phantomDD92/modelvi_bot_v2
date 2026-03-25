@@ -125,7 +125,7 @@ export class FanvueBot extends PostBot {
     const content: IContent = contents[postIndex];
     const media = content.media[0];
     try {
-      let folderName = content.folder;
+      let folderName = (content.folder || "").trim();
       if (!folderName || folderName == "") folderName = "Posts";
       // first check media validation
       if (!isNormalMedia(media)) {
@@ -188,7 +188,7 @@ export class FanvueBot extends PostBot {
     try {
       for (var medium of schedule.medias) {
         try {
-          const mediaId = await this.getMedia(schedule.folder, medium);
+          const mediaId = await this.getMedia((schedule.folder || "Posts").trim(), medium);
           mediaIds.push(mediaId);
         } catch (error: any) {
           this.logger.notifyError(error);
