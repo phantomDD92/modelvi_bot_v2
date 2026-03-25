@@ -19,6 +19,7 @@ import { Logger } from "../utils/logger";
 import { BaseBrowser } from "./base-browser";
 import { format, toZonedTime } from "date-fns-tz";
 import { PostType } from "../types/constant";
+
 declare global {
   interface Window {
     cfCallback?: (token: any) => void; // or appropriate function signature
@@ -34,23 +35,15 @@ export class FanvueBrowser extends BaseBrowser {
 
   protected async setFilter(): Promise<void> {
     await super.setFilter();
-    //media.fanvue.com/public/1598a279-a18c-4f23-a51b-03399db3089d/blurred-images/9685a1c3-5d04-478c-b1f7-485946ea9cb8
-    https: await this.context.route(
-      /https:\/\/media\.fanvue\.com\/.*/,
-      (route) =>
-        route.request().method() == "GET" ? route.abort() : route.continue()
+    await this.context.route(/https:\/\/media\.fanvue\.com\/.*/,
+      (route) => route.request().method() == "GET" ? route.abort() : route.continue()
     );
   }
 
   public async home(): Promise<void> {
     try {
       await this.page.route(/.+\.js/, async (route) => {
-        if (
-          route
-            .request()
-            .url()
-            .includes("https://challenges.cloudflare.com/turnstile/v0/api.js")
-        ) {
+        if (route.request().url().includes("https://challenges.cloudflare.com/turnstile/v0/api.js")) {
           this.logger.info("install captcha solver");
           const response = await route.fetch();
           const body = fs.readFileSync("./data/fanvue.dat");
@@ -63,11 +56,10 @@ export class FanvueBrowser extends BaseBrowser {
           route.continue();
         }
       });
+
       this.page.on("console", async (msg) => {
         if (msg.text().includes("intercepted-params:")) {
-          const params = JSON.parse(
-            msg.text().replace("intercepted-params:", "")
-          );
+          const params = JSON.parse(msg.text().replace("intercepted-params:", ""));
           const res = await this.solver.cloudflareTurnstile({
             pageurl: params.pageurl,
             sitekey: params.sitekey,
@@ -79,27 +71,19 @@ export class FanvueBrowser extends BaseBrowser {
           }, res.data);
         }
       });
-      await this.page.goto("https://www.fanvue.com/", {
-        waitUntil: "domcontentloaded",
-        timeout: 120000,
-      });
+      await this.page.goto("https://www.fanvue.com/", { waitUntil: "domcontentloaded", timeout: 120000, });
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
         where: "FanvueBrowser::home",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
 
-  public async login(
-    setting: IAccountSettings
-  ): Promise<IAccountID | undefined> {
+  public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
     try {
       // goto signin page
-      await this.page.goto("https://www.fanvue.com/signin", {
-        timeout: 120000,
-      });
+      await this.page.goto("https://www.fanvue.com/signin", { timeout: 120000, });
       // set email and password
       await this.page.locator("input#email").waitFor();
       await this.page.locator("input#email").fill(setting.email);
@@ -107,9 +91,7 @@ export class FanvueBrowser extends BaseBrowser {
       // wait for captcha solved
       let captchaSolved = false;
       for (var i = 0; i < 10; i++) {
-        const disabled = await this.page
-          .getByRole("button", { name: "Sign In", exact: true })
-          .isDisabled();
+        const disabled = await this.page.getByRole("button", { name: "Sign In", exact: true }).isDisabled();
         if (!disabled) {
           captchaSolved = true;
           break;
@@ -119,32 +101,15 @@ export class FanvueBrowser extends BaseBrowser {
       if (!captchaSolved) throw new BotError("login failed");
 
       // wait login success
-      const loginPromise = this.page.waitForResponse(
-        (response) => {
-          return (
-            response
-              .url()
-              .includes(
-                "https://www.fanvue.com/api/auth/callback/credentials"
-              ) && response.request().method() === "POST"
-          );
-        },
+      const loginPromise = this.page.waitForResponse((response) =>
+        response.url().includes("https://www.fanvue.com/api/auth/callback/credentials") && response.request().method() === "POST",
         { timeout: 180000 }
       );
-      const profilePromise = this.page.waitForResponse(
-        (response) => {
-          return (
-            response
-              .url()
-              .includes("https://www.fanvue.com/trpc/user.getOwnProfile") &&
-            response.request().method() === "GET"
-          );
-        },
+      const profilePromise = this.page.waitForResponse((response) =>
+        response.url().includes("https://www.fanvue.com/trpc/user.getOwnProfile") && response.request().method() === "GET",
         { timeout: 180000 }
       );
-      await this.page
-        .getByRole("button", { name: "Sign In", exact: true })
-        .click();
+      await this.page.getByRole("button", { name: "Sign In", exact: true }).click();
       // check login api response
       const loginResp = await loginPromise;
       if (!loginResp.ok())
@@ -177,22 +142,17 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("login failed", {
         where: "FanvueBrowser::login",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
 
   public async getMonthlyEarnings(): Promise<number> {
     try {
-      const resp = await this.page.request.get(
-        "https://www.fanvue.com/trpc/invoice.getEarningsList",
-        {
-          headers: this.headers,
-          params: { input: JSON.stringify({ json: { direction: "forward" } }) },
-        }
+      const resp = await this.page.request.get("https://www.fanvue.com/trpc/invoice.getEarningsList",
+        { headers: this.headers, params: { input: JSON.stringify({ json: { direction: "forward" } }) }, }
       );
       const respData = await resp.json();
-      if (!resp.ok()) {
+      if (!resp.ok())
         throw new BotError("get earnings failed", {
           where: "FanvueBrowser::getMonthlyEarnings",
           method: "GET",
@@ -200,7 +160,7 @@ export class FanvueBrowser extends BaseBrowser {
           status: resp.statusText(),
           response: JSON.stringify(respData),
         });
-      }
+
       const items: IFanvueEarning[] = respData.result?.data?.json?.items || [];
       const lastMonth = moment().subtract(30, "day").startOf("day").toDate();
       const revenue = items
@@ -212,19 +172,14 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("get earnings failed", {
         where: "FanvueBrowser::getMonthlyEarnings",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
 
   public async createFolder(folderName: string) {
     try {
-      const resp = await this.page.request.post(
-        "https://www.fanvue.com/trpc/vault.createVaultFolder",
-        {
-          headers: this.headers,
-          data: { json: { folderName } },
-        }
+      const resp = await this.page.request.post("https://www.fanvue.com/trpc/vault.createVaultFolder",
+        { headers: this.headers, data: { json: { folderName } }, }
       );
       if (!resp.ok()) {
         throw new BotError("create folder failed", {
@@ -241,15 +196,13 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("create folder failed", {
         where: "FanvueBrowser::createFolder",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
 
   public async getFolders(): Promise<string[]> {
     try {
-      const resp = await this.page.request.get(
-        "https://www.fanvue.com/trpc/vault.getVaultFolders",
+      const resp = await this.page.request.get("https://www.fanvue.com/trpc/vault.getVaultFolders",
         {
           headers: this.headers,
           params: {
@@ -277,7 +230,6 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("get folders failed", {
         where: "FanvueBrowser::getFolders",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -290,8 +242,7 @@ export class FanvueBrowser extends BaseBrowser {
       let vault;
       let cursor;
       while (true) {
-        const resp = await this.page.request.get(
-          "https://www.fanvue.com/trpc/vault.getVaultMediaList",
+        const resp = await this.page.request.get("https://www.fanvue.com/trpc/vault.getVaultMediaList",
           {
             headers: this.headers,
             params: {
@@ -339,43 +290,29 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("find vault failed", {
         where: "FanvueBrowser::findVaultInFolder",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
 
-  public async moveVaultToFolder(
-    vaultId: string,
-    folderName: string
-  ): Promise<void> {
+  public async moveVaultToFolder(vaultId: string, folderName: string): Promise<void> {
     try {
-      const resp = await this.page.request.post(
-        "https://www.fanvue.com/trpc/vault.moveMediaToFolder",
-        {
-          headers: this.headers,
-          data: {
-            json: {
-              sourceFolderName: null,
-              targetFolderName: folderName,
-              mediaUuids: [vaultId],
-            },
-            meta: { values: { sourceFolderName: ["undefined"] } },
-          },
-        }
+      const params = {
+        json: {
+          sourceFolderName: null,
+          targetFolderName: folderName,
+          mediaUuids: [vaultId],
+        },
+        meta: { values: { sourceFolderName: ["undefined"] } },
+      }
+      const resp = await this.page.request.post("https://www.fanvue.com/trpc/vault.moveMediaToFolder",
+        { headers: this.headers, data: params, }
       );
       if (!resp.ok()) {
         throw new BotError("move vault failed", {
           where: "FanvueBrowser::moveVaultToFolder",
           method: "POST",
           endpoint: "https://www.fanvue.com/trpc/vault.moveMediaToFolder",
-          params: {
-            json: {
-              sourceFolderName: null,
-              targetFolderName: folderName,
-              mediaUuids: [vaultId],
-            },
-            meta: { values: { sourceFolderName: ["undefined"] } },
-          },
+          params,
           status: resp.statusText(),
           response: await resp.text(),
         });
@@ -385,7 +322,6 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("move vault failed", {
         where: "FanvueBrowser::moveVaultToFolder",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -393,27 +329,12 @@ export class FanvueBrowser extends BaseBrowser {
   public async uploadVault(mediaPath: string): Promise<string> {
     try {
       await this.page.goto("https://www.fanvue.com/vault", { timeout: 180000 });
-      const createUploadPromise = this.page.waitForResponse(
-        (response) => {
-          return (
-            response
-              .url()
-              .includes(
-                "https://www.fanvue.com/trpc/media.createMediaMultipartUpload"
-              ) && response.request().method() === "POST"
-          );
-        },
+      const createUploadPromise = this.page.waitForResponse((response) =>
+        response.url().includes("https://www.fanvue.com/trpc/media.createMediaMultipartUpload") && response.request().method() === "POST",
         { timeout: 600000 }
       );
-      const finalUploadPromise = this.page.waitForResponse(
-        (response) => {
-          return (
-            response
-              .url()
-              .includes("https://www.fanvue.com/trpc/media.finaliseMedia") &&
-            response.request().method() === "POST"
-          );
-        },
+      const finalUploadPromise = this.page.waitForResponse((response) =>
+        response.url().includes("https://www.fanvue.com/trpc/media.finaliseMedia") && response.request().method() === "POST",
         { timeout: 600000 }
       );
       await this.page.locator("input#files").first().setInputFiles(mediaPath);
@@ -439,18 +360,17 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("upload vault failed", {
         where: "FanvueBrowser::uploadVault",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
 
   public async deleteVault(mediaId: string) {
     try {
-      const resp = await this.page.request.post(
-        "https://www.fanvue.com/trpc/vault.deleteMediaFromVault",
+      const params = { json: { mediaUuids: [mediaId] } }
+      const resp = await this.page.request.post("https://www.fanvue.com/trpc/vault.deleteMediaFromVault",
         {
           headers: this.headers,
-          data: { json: { mediaUuids: [mediaId] } },
+          data: params,
         }
       );
       if (!resp.ok()) {
@@ -458,7 +378,7 @@ export class FanvueBrowser extends BaseBrowser {
           where: "FanvueBrowser::moveVaultToFolder",
           method: "POST",
           endpoint: "https://www.fanvue.com/trpc/vault.deleteMediaFromVault",
-          params: { json: { mediaUuids: [mediaId] } },
+          params,
           status: resp.statusText(),
           response: await resp.text(),
         });
@@ -468,7 +388,6 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("delete vault failed", {
         where: "FanvueBrowser::deleteVault",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -481,13 +400,7 @@ export class FanvueBrowser extends BaseBrowser {
     return formattedDate;
   }
 
-  public async schedulePost(
-    scheduledAt: Date,
-    title: string,
-    mediaIds: string[],
-    postType: number,
-    price?: number
-  ) {
+  public async schedulePost(scheduledAt: Date, title: string, mediaIds: string[], postType: number, price?: number) {
     try {
       let params;
       switch (postType) {
@@ -560,12 +473,8 @@ export class FanvueBrowser extends BaseBrowser {
           };
           break;
       }
-      const resp = await this.page.request.post(
-        "https://www.fanvue.com/trpc/post.createPost",
-        {
-          headers: this.headers,
-          data: params,
-        }
+      const resp = await this.page.request.post("https://www.fanvue.com/trpc/post.createPost",
+        { headers: this.headers, data: params, }
       );
       const respData = await resp.json();
       if (!resp.ok())
@@ -583,7 +492,6 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("schedule post failed", {
         where: "FanvueBrowser::schedulePost",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -610,19 +518,14 @@ export class FanvueBrowser extends BaseBrowser {
             },
           }),
         };
-        const resp = await this.page.request.get(
-          "https://www.fanvue.com/trpc/post.getPosts",
-          {
-            headers: this.headers,
-            params,
-          }
+        const resp = await this.page.request.get("https://www.fanvue.com/trpc/post.getPosts",
+          { headers: this.headers, params, }
         );
         if (!resp.ok())
           throw new BotError("get posts failed", {
             where: "FanvueBrowser::getPosts",
             method: "GET",
-            endpoint:
-              "https://https://www.fanvue.com/trpc/post.getPosts.fanvue.com/trpc/post.createPost",
+            endpoint: "https://https://www.fanvue.com/trpc/post.getPosts.fanvue.com/trpc/post.createPost",
             params,
             status: resp.statusText(),
             response: await resp.text(),
@@ -641,7 +544,6 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("get posts failed", {
         where: "FanvueBrowser::getSelfPosts",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -649,7 +551,6 @@ export class FanvueBrowser extends BaseBrowser {
   public async createPost(title: string, mediaIds: string | string[]) {
     try {
       const mediaUuids = Array.isArray(mediaIds) ? mediaIds : [mediaIds];
-
       if (mediaUuids.length === 0) {
         throw new BotError("create post failed", {
           where: "FanvueBrowser::createPost",
@@ -957,7 +858,7 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("create post failed", {
         where: "FanvueBrowser::createPost",
         error: error.message,
-        stack: error.stack,
+
       })
     }
   }
@@ -965,12 +866,8 @@ export class FanvueBrowser extends BaseBrowser {
 
   public async deletePost(postId: string): Promise<void> {
     try {
-      const resp = await this.page.request.post(
-        "https://www.fanvue.com/trpc/post.deletePost",
-        {
-          headers: this.headers,
-          data: { json: { postUuid: postId } },
-        }
+      const resp = await this.page.request.post("https://www.fanvue.com/trpc/post.deletePost",
+        { headers: this.headers, data: { json: { postUuid: postId } }, }
       );
       if (!resp.ok())
         throw new BotError("delete post failed", {
@@ -986,7 +883,6 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("delete post failed", {
         where: "FanvueBrowser::deletePost",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -1003,12 +899,8 @@ export class FanvueBrowser extends BaseBrowser {
           },
         }),
       };
-      const resp = await this.page.request.get(
-        "https://www.fanvue.com/trpc/chat.getChatList",
-        {
-          headers: this.headers,
-          params,
-        }
+      const resp = await this.page.request.get("https://www.fanvue.com/trpc/chat.getChatList",
+        { headers: this.headers, params, }
       );
       if (!resp.ok())
         throw new BotError("get chats failed", {
@@ -1031,7 +923,6 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("get chats failed", {
         where: "FanvueBrowser::getUnreadChats",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -1051,10 +942,8 @@ export class FanvueBrowser extends BaseBrowser {
           }
         })
       };
-      const resp = await this.page.request.get("https://www.fanvue.com/trpc/post.getFeed", {
-        headers: this.headers,
-        params
-      });
+      const resp = await this.page.request.get("https://www.fanvue.com/trpc/post.getFeed",
+        { headers: this.headers, params });
       if (!resp.ok())
         throw new BotError("get feed failed", {
           where: "FanvueBrowser::getFeed",
@@ -1071,7 +960,6 @@ export class FanvueBrowser extends BaseBrowser {
       throw new BotError("get feed failed", {
         where: "FanvueBrowser::getFeed",
         error: error.message,
-        stack: error.stack,
       });
     }
   }
@@ -1098,7 +986,10 @@ export class FanvueBrowser extends BaseBrowser {
     }
     catch (error: any) {
       if (error instanceof BotError) throw error;
-      throw new BotError("comment post failed", { where: "FanvueBrowser::commentPost", error: error.message, stack: error.stack });
+      throw new BotError("comment post failed", { 
+        where: "FanvueBrowser::commentPost", 
+        error: error.message, 
+      });
     }
   }
 
@@ -1124,7 +1015,10 @@ export class FanvueBrowser extends BaseBrowser {
     }
     catch (error: any) {
       if (error instanceof BotError) throw error;
-      throw new BotError("like post failed", { where: "FanvueBrowser::likePost", error: error.message, stack: error.stack });
+      throw new BotError("like post failed", { 
+        where: "FanvueBrowser::likePost", 
+        error: error.message, 
+      });
     }
   }
 }

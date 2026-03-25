@@ -1,16 +1,10 @@
 import moment from "moment";
+import { PostBot } from "./post-bot";
 import { FanvueBrowser } from "../browser/fanvue-browser";
 import { PostApiService } from "../services/post-service";
-import {
-  IBotConfig,
-  IContent,
-  IMedia,
-  ISchedulePost,
-  IScheduleResult,
-} from "../types/interface";
 import { Logger } from "../utils/logger";
-import { PostBot } from "./post-bot";
 import { BotError } from "../utils/error";
+import { isNormalMedia } from "../utils/helper";
 import {
   ActionType,
   DEFAULT_LIVING_POSTS as DEFAULT_LIVING_POSTS,
@@ -18,9 +12,16 @@ import {
   PostType,
   ScheduleStatus,
 } from "../types/constant";
-import { isNormalMedia } from "../utils/helper";
+import {
+  IBotConfig,
+  IContent,
+  IMedia,
+  ISchedulePost,
+  IScheduleResult,
+} from "../types/interface";
 
 export class FanvueBot extends PostBot {
+
   protected browser!: FanvueBrowser;
   protected service!: PostApiService;
 
@@ -77,13 +78,7 @@ export class FanvueBot extends PostBot {
       const revenue = await this.browser.getMonthlyEarnings();
       const available = await this.service.checkBalance(revenue);
       if (!available)
-        await this.service.createLog({
-          success: false,
-          action: ActionType.LOGIN,
-          message: `bot closed due to no balance`,
-          error: "no balance",
-          notified: true,
-        });
+        await this.service.createLog({ success: false, action: ActionType.LOGIN, message: `bot closed due to no balance`, error: "no balance", notified: true, });
       return available;
     } catch (error: any) {
       this.logger.notifyError(error);
@@ -100,12 +95,8 @@ export class FanvueBot extends PostBot {
       const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
       const postRemains = this.settings.params?.postRemains || [];
       const postIds: string[] = await this.browser.getSelfPosts();
-      const postsPublished = postIds.filter((postId) =>
-        postRemains.includes(postId)
-      );
-      this.logger.info(
-        `submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`
-      );
+      const postsPublished = postIds.filter((postId) => postRemains.includes(postId));
+      this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${postIds.length}, published posts: ${postsPublished.length}`);
       const deleteIds = [];
       while (postsPublished.length > postCount && deleteIds.length < maxDelete) {
         const postDeleting = postsPublished.pop();
@@ -123,16 +114,9 @@ export class FanvueBot extends PostBot {
   }
 
   protected async doPost(): Promise<boolean> {
-    if (
-      !this.settings.params?.contents ||
-      this.settings.params.contents.length == 0
-    ) {
+    if (!this.settings.params?.contents || this.settings.params.contents.length == 0) {
       this.logger.info(`account has no content to post`);
-      await this.service.updatePostResult(
-        PostResultType.SUCCESS,
-        undefined,
-        []
-      );
+      await this.service.updatePostResult(PostResultType.SUCCESS, undefined, []);
       return true;
     }
     const contents = this.settings.params.contents;
@@ -145,58 +129,31 @@ export class FanvueBot extends PostBot {
       if (!folderName || folderName == "") folderName = "Posts";
       // first check media validation
       if (!isNormalMedia(media)) {
-        await this.service.createLog({
-          success: true,
-          action: ActionType.POST,
-          message: `skip to create ${postIndex + 1}st post(${content.title})`,
-        });
-        await this.service.updatePostResult(
-          PostResultType.PROHIBITED,
-          undefined,
-          []
-        );
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `skip to create ${postIndex + 1}st post(${content.title})`, });
+        await this.service.updatePostResult(PostResultType.PROHIBITED, undefined, []);
         return true;
       }
       let mediaId = await this.getMedia(folderName, media);
       if (mediaId != media.uuid) {
-        await this.service.createLog({
-          success: true,
-          action: ActionType.POST,
-          message: `upload ${postIndex + 1}st media(${content.title})`,
-          target: mediaId,
-        });
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `upload ${postIndex + 1}st media(${content.title})`, target: mediaId, });
         await this.service.updateContentMedia(postIndex, mediaId);
       }
       const postType = (content.postType === 'PAID') ? PostType.PAID : (content.postType === 'FANS' || content.postType === 'FAN') ? PostType.FANS : PostType.FREE;
       const postPrice = postType === PostType.PAID ? (content.price || 0) : 0;
       const postId = await this.browser.schedulePost(new Date(), content.title, [mediaId], postType, postPrice);
       if (postId) {
-        await this.service.createLog({
-          success: true,
-          action: ActionType.POST,
-          message: `create ${postIndex + 1}st post(${content.title})`,
-          target: postId,
-        });
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `create ${postIndex + 1}st post(${content.title})`, target: postId, });
       }
       const deleteIds = await this.deleteOldPosts();
-      if (deleteIds.length > 0) {
-        await this.service.createLog({
-          success: true,
-          action: ActionType.POST,
-          message: `delete ${deleteIds.length} posts`,
-          targets: deleteIds,
-        });
-      }
+      if (deleteIds.length > 0)
+        await this.service.createLog({ success: true, action: ActionType.POST, message: `delete ${deleteIds.length} posts`, targets: deleteIds, });
+
       this.service.updatePostResult(PostResultType.SUCCESS, postId, deleteIds);
       return true;
     } catch (error: any) {
       this.logger.notifyError(error);
       await this.service.updatePostResult(PostResultType.FAILED, undefined, []);
-      await this.service.createLog({
-        success: false,
-        action: ActionType.POST,
-        message: `failed to create ${postIndex + 1}st post(${content.title})`,
-      });
+      await this.service.createLog({ success: false, action: ActionType.POST, message: `failed to create ${postIndex + 1}st post(${content.title})`, });
       return false;
     }
   }
@@ -212,9 +169,7 @@ export class FanvueBot extends PostBot {
       this.logger.info(`no published posts among ${postIds.length} posts`);
       return [];
     }
-    const publishedPosts = postIds.filter((postId) =>
-      schedulePostIds.includes(postId)
-    );
+    const publishedPosts = postIds.filter((postId) => schedulePostIds.includes(postId));
     const results = publishedPosts.map((postId) => {
       const schedule = schedules.find((element) => element.post == postId);
       return {
@@ -223,9 +178,7 @@ export class FanvueBot extends PostBot {
         status: ScheduleStatus.FINISHED,
       };
     });
-    this.logger.info(
-      `${results.length} published posts among ${postIds.length} posts`
-    );
+    this.logger.info(`${results.length} published posts among ${postIds.length} posts`);
     return results;
   }
 
@@ -246,42 +199,14 @@ export class FanvueBot extends PostBot {
           where: "MaloumBot::publishSchedule",
           error: "no media uploaded",
         });
-      await this.service.createLog({
-        success: true,
-        action: ActionType.SCHEDULE,
-        message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`,
-        targets: mediaIds,
-      });
-      const postId = await this.browser.schedulePost(
-        new Date(post.scheduledAt),
-        schedule.title,
-        mediaIds,
-        schedule.type,
-        schedule.price
-      );
-      await this.service.createLog({
-        success: true,
-        action: ActionType.SCHEDULE,
-        message: `create schedule post(${schedule.title})`,
-        target: postId,
-      });
-      await this.service.updateScheduleResult({
-        id: post._id,
-        post: postId,
-        status: ScheduleStatus.SCHEDULED,
-      });
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `upload ${mediaIds.length}/${schedule.medias.length} schedule media(${schedule.title})`, targets: mediaIds, });
+      const postId = await this.browser.schedulePost(new Date(post.scheduledAt), schedule.title, mediaIds, schedule.type, schedule.price);
+      await this.service.createLog({ success: true, action: ActionType.SCHEDULE, message: `create schedule post(${schedule.title})`, target: postId, });
+      await this.service.updateScheduleResult({ id: post._id, post: postId, status: ScheduleStatus.SCHEDULED, });
     } catch (error) {
       this.logger.notifyError(error);
-      await this.service.createLog({
-        success: false,
-        action: ActionType.SCHEDULE,
-        message: `failed to create schedule post(${schedule.title})`,
-      });
-      await this.service.updateScheduleResult({
-        id: post._id,
-        status: ScheduleStatus.FAILED,
-        reason: "internal error",
-      });
+      await this.service.createLog({ success: false, action: ActionType.SCHEDULE, message: `failed to create schedule post(${schedule.title})`, });
+      await this.service.updateScheduleResult({ id: post._id, status: ScheduleStatus.FAILED, reason: "internal error", });
     }
   }
 
@@ -290,15 +215,9 @@ export class FanvueBot extends PostBot {
       let results: IScheduleResult[] = [];
       // update next schedule time and get schedule list
       const schedules = await this.service.updateScheduleSetting();
-      const waitingSchedules = schedules.filter(
-        (schedule) => schedule.status == ScheduleStatus.WAITING
-      );
-      const scheduledSchedules = schedules.filter(
-        (schedule) => schedule.status == ScheduleStatus.SCHEDULED
-      );
-      this.logger.info(
-        `waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`
-      );
+      const waitingSchedules = schedules.filter((schedule) => schedule.status == ScheduleStatus.WAITING);
+      const scheduledSchedules = schedules.filter((schedule) => schedule.status == ScheduleStatus.SCHEDULED);
+      this.logger.info(`waiting posts: ${waitingSchedules.length}, scheduled posts: ${scheduledSchedules.length}`);
       // check published schedules
       if (scheduledSchedules.length > 0)
         results = await this.checkPublishedSchedules(scheduledSchedules);
@@ -361,12 +280,7 @@ export class FanvueBot extends PostBot {
         const comment = this.pickup(params.comments);
         await this.browser.commentPost(post.uuid, comment);
         await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 2000) + 1000));
-        await this.service.createLog({
-          success: true,
-          action: ActionType.COMMENT,
-          message: `comment post`,
-          target: post.uuid,
-        });
+        await this.service.createLog({ success: true, action: ActionType.COMMENT, message: `comment post`, target: post.uuid, });
         success = true;
         break;
       }
@@ -374,22 +288,10 @@ export class FanvueBot extends PostBot {
     }
     catch (error) {
       this.logger.notifyError(error);
-      await this.service.createLog({
-        success: false,
-        action: ActionType.COMMENT,
-        message: "failed to comment",
-      });
+      await this.service.createLog({ success: false, action: ActionType.COMMENT, message: "failed to comment", });
       return false;
     }
   }
-
-  // protected needSchedule(): boolean {
-  //   return false;
-  // }
-
-  // protected needPost(): boolean {
-  //   return false;
-  // }
 
   protected needStory(): boolean {
     return false;
