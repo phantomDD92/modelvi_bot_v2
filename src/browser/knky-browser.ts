@@ -584,24 +584,30 @@ export class KnkyBrowser extends BaseBrowser {
 
   public async createPost(content: IContent, image: string): Promise<string> {
     try {
-      // go to new post page
-      await this.page.goto("https://knky.co/create/new-post");
-      await this.checkFirstPost();
-      // change post audience public
-      await this.page.locator("div.post-type-wrapper div.dropdown > button").first().click();
-      await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']",).waitFor();
-      await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']",).first().click();
-
-      // Select post type based on content.postType
+      // Determine post type first
       const resolvedType = (content.postType === 'PAID') ? 3 : (content.postType === 'FANS' || content.postType === 'FAN') ? 2 : 1;
-      if (resolvedType === 2) {
-        await this.page
-          .locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-4']").first().click();
-      } else {
-        await this.page
-          .locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']").first().click();
+      const postUrl = resolvedType === 2 ? "https://knky.co/create/new-post?isChannelPost=true" : "https://knky.co/create/new-post";
+      await this.page.goto(postUrl, { timeout: 300000 });
+      await this.checkFirstPost();
+      // Open post type dropdown and select correct option
+      await this.page.locator("div.post-type-wrapper div.dropdown > button").first().click();
+      if (resolvedType === 3) {
+        // PAID - pay-to-view
+        await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-1']").waitFor();
+        await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-1']").first().click();
+        await this.page.locator("input[name='Price to unlock']").first().waitFor();
+        await this.page.locator("input[name='Price to unlock']").first().fill(`${content.price || 5}`);
       }
-
+      else if (resolvedType === 2) {
+        // FANS/Prime
+        await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-4']").waitFor();
+        await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-4']").first().click();
+      }
+      else {
+        // FREE/Public
+        await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']").waitFor();
+        await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']").first().click();
+      }
       // set content
       const tagsStr = content.postTags.map((tag) => `#${tag}`).join(" ");
       await this.page.locator("div.create-post-content div.caption-content textarea").first().fill(`${content.title}\n${tagsStr}`);

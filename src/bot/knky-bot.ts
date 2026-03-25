@@ -41,25 +41,30 @@ export class KnKyBot extends PostBot {
   }
 
   private async deleteOldPosts() {
-    // Check if auto-delete is enabled
-    if (this.settings.params?.autoDelete === false) return [];
-    const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
-    const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
-    const postRemains = this.settings.params?.postRemains || [];
-    const posts = await this.browser.getSelfPosts();
-    const postsPublished = posts.filter(post => postRemains.includes(post._id));
-    this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${posts.length}, published posts: ${postsPublished.length}`);
-    const deleteIds = [];
-    while (postsPublished.length > postCount && deleteIds.length < maxDelete) {
-      const postDeleting = postsPublished.pop()
-      if (postDeleting) {
-        deleteIds.push(postDeleting._id)
-        await this.browser.deletePost(postDeleting._id);
-        deleteIds.push(postDeleting._id)
-        this.logger.info(`delete a post(${postDeleting._id})`);
+    let deleteIds = [];
+    try {
+      // Check if auto-delete is enabled
+      if (this.settings.params?.autoDelete === false) return [];
+      const postCount = this.settings.params?.postCount || DEFAULT_LIVING_POSTS;
+      const maxDelete = this.settings.params?.maxDeletePerCycle ?? 3;
+      const postRemains = this.settings.params?.postRemains || [];
+      const posts = await this.browser.getSelfPosts();
+      const postsPublished = posts.filter(post => postRemains.includes(post._id));
+      this.logger.info(`submitted posts: ${postRemains.length}, account posts: ${posts.length}, published posts: ${postsPublished.length}`);
+      while (postsPublished.length > postCount && deleteIds.length < maxDelete) {
+        const postDeleting = postsPublished.pop()
+        if (postDeleting) {
+          deleteIds.push(postDeleting._id)
+          await this.browser.deletePost(postDeleting._id);
+          deleteIds.push(postDeleting._id)
+          this.logger.info(`delete a post(${postDeleting._id})`);
+        }
       }
+      return deleteIds;
+    } catch (error: any) {
+      this.logger.notifyError(error);
+      return deleteIds;
     }
-    return deleteIds;
   }
 
   // bot action for posting
