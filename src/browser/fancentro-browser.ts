@@ -750,14 +750,15 @@ export class FancentroBrowser extends BaseBrowser {
 
   public async refreshApiSession() {
     try {
-      const viewPromise = this.page.waitForResponse("https://fancentro.com/api/v1/api/viewData");
+      const viewPromise = this.page.waitForResponse("https://fancentro.com/notifications/api/notifications/count");
+	  console.log(this.profile.alias);
       await this.page.goto(`https://fancentro.com/${this.profile.alias}`);
       const viewResp = await viewPromise;
       if (!viewResp.ok()) {
         throw new BotError("refresh session failed", {
           where: "FancentroBrowser::refreshApiSession",
           method: "GET",
-          endpoint: "https://fancentro.com/api/v1/api/viewData",
+          endpoint: "https://fancentro.com/notifications/api/notifications/count",
           status: viewResp.statusText(),
         });
       }
