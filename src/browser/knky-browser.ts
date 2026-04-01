@@ -144,6 +144,31 @@ export class KnkyBrowser extends BaseBrowser {
 
   public async login(setting: IAccountSettings): Promise<IAccountID | undefined> {
     try {
+      //--- append by ai
+      // Check if already logged in via saved session
+      try {
+        const signInVisible = await this.page.locator("header button", { hasText: "Sign In" }).isVisible({ timeout: 3000 });
+        if (!signInVisible) {
+          this.logger.info("session active, skipping login");
+          const dataPromise = this.page.waitForResponse((r) => r.url().includes("/v1/users/") && r.request().method() === "GET", { timeout: 15000 });
+          await this.page.goto("https://knky.co/chat", { timeout: 30000 });
+          const dataResp = await dataPromise;
+          this.headers = await dataResp.request().allHeaders();
+          const profResp = await this.page.request.get("https://backend.knky.co/v1/users/profile", { headers: this.headers });
+          if (profResp.ok()) {
+            const profPayload = await profResp.json();
+            const profData = this.parsePayload(profPayload);
+            this.profile = profData.data[0];
+            return { alias: this.profile.username, id: this.profile._id };
+          }
+          this.logger.info("saved session expired, doing fresh login");
+          await this.page.goto("https://knky.co/", { waitUntil: "domcontentloaded", timeout: 100000 });
+          await this.afterHome();
+        }
+      } catch (sessionErr) {
+        this.logger.info("session check failed, doing fresh login");
+      }
+      //--- append by ai
       // click sign in button to show sign in modakl
       await this.wait(5000);
       await this.page.locator("header button", { hasText: "Sign In" }).click();
@@ -584,6 +609,7 @@ export class KnkyBrowser extends BaseBrowser {
 
   public async createPost(content: IContent, image: string): Promise<string> {
     try {
+      //--- append by ai
       // Determine post type first
       const resolvedType = (content.postType === 'PAID') ? 3 : (content.postType === 'FANS' || content.postType === 'FAN') ? 2 : 1;
       const postUrl = resolvedType === 2 ? "https://knky.co/create/new-post?isChannelPost=true" : "https://knky.co/create/new-post";
@@ -608,6 +634,7 @@ export class KnkyBrowser extends BaseBrowser {
         await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']").waitFor();
         await this.page.locator("div.post-type-wrapper div.dropdown > ul > li > label[for='flexCheckDefault-2']").first().click();
       }
+      //--- append by ai
       // set content
       const tagsStr = content.postTags.map((tag) => `#${tag}`).join(" ");
       await this.page.locator("div.create-post-content div.caption-content textarea").first().fill(`${content.title}\n${tagsStr}`);
