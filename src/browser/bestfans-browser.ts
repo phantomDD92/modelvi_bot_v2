@@ -75,35 +75,86 @@ export class BestFansBrowser extends BaseBrowser {
       // set email and click login button
       await this.page.locator("input#login-email").fill(setting.email);
       await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
-
-      // set password and click login button
-      await this.page.locator("input#login-password").waitFor();
-      await this.page.locator("input#login-password").fill(setting.password);
+      //--- append by ai
+      // Wait for password field to appear (it may be in DOM but initially hidden)
+      await this.page.locator("input#login-password").waitFor({ state: 'attached', timeout: 30000 });
+      await this.page.waitForTimeout(2000);
+      // Force the password field to be visible if hidden
+      await this.page.evaluate(() => {
+        var pwField = document.querySelector('input#login-password') as HTMLInputElement;
+        if (pwField) {
+          pwField.removeAttribute('hidden');
+          pwField.style.display = '';
+          pwField.style.visibility = 'visible';
+          pwField.style.opacity = '1';
+          var parent = pwField.parentElement;
+          while (parent && parent !== document.body) {
+            parent.style.display = '';
+            parent.style.visibility = 'visible';
+            parent.style.opacity = '1';
+            parent = parent.parentElement;
+          }
+        }
+      });
+      await this.page.waitForTimeout(500);
+      // Fill password using evaluate to bypass visibility checks
+      await this.page.evaluate(function (password) {
+        var pwField = document.querySelector('input#login-password');
+        if (pwField) {
+          // var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          // nativeInputValueSetter.call(pwField, password);
+          pwField.dispatchEvent(new Event('input', { bubbles: true }));
+          pwField.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, setting.password);
+      // Set up response interceptor to capture profile headers
+      let capturedHeaders = null;
+      let capturedProfileName = null;
+      const responseHandler = async (response: any) => {
+        if (response.request().url().includes("https://www.bestfans.com/profile/header/")) {
+          capturedHeaders = await response.request().allHeaders();
+          capturedProfileName = this.getLastPathFromUrl(response.request().url());
+        }
+      };
+      this.page.on('response', responseHandler);
       await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
-
-      // // wait recaptcha and solve it
-      // await this.page.locator('iframe[title="reCAPTCHA"]').first().waitFor();
-      // this.logger.info("start to solve captcha...");
-      // const token = await this.solveCaptcha();
-
-      // // set recaptcha response
-      // await this.page.evaluate((token) => {
-      //   (document.querySelector('[name="recaptcha_token_v2"]',) as HTMLTextAreaElement).value = token;
-      // }, token);
-
-      // install profile response waiter
-      const profilePromise = this.page.waitForResponse((response) =>
-        response.request().url().includes("https://www.bestfans.com/profile/header/") && response.request().method() == "POST",
-      );
-      // click login button
-      // await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
-      const profileResp = await profilePromise;
-      this.headers = await profileResp.request().allHeaders();
-
-      // get request headers, alias, name
+      this.logger.info("password submitted, checking for captcha...");
+      // Solve reCAPTCHA if it appears - try multiple selectors with 15s window
+      let captchaSolved = false;
+      try {
+        // Wait for captcha to appear (try iframe selector with longer timeout)
+        await this.page.waitForSelector('iframe[src*="recaptcha"], iframe[title*="reCAPTCHA"], iframe[title*="recaptcha"], [name="recaptcha_token_v2"]', { timeout: 15000 });
+        this.logger.info("captcha detected, solving...");
+        const token = await this.solveCaptcha();
+        await this.page.evaluate((token) => {
+          const el = document.querySelector('[name="recaptcha_token_v2"]') as HTMLInputElement;
+          if (el) el.value = token;
+        }, token);
+        captchaSolved = true;
+        this.logger.info("captcha solved, clicking submit...");
+        await this.page.locator("form button", { hasText: "LOGIN NOW!" }).click();
+      } catch (captchaErr) {
+        this.logger.info("no captcha detected (15s timeout), proceeding without captcha solve");
+      }
+      // Wait for navigation away from login page
+      this.logger.info("waiting for login navigation...");
+      try {
+        await this.page.waitForURL((url) => !url.toString().includes('/login'), { timeout: 120000 });
+      } catch (navErr) {
+        // Check current URL to provide better error message
+        const currentUrl = this.page.url();
+        const pageTitle = await this.page.title().catch(() => 'unknown');
+        throw new Error('login navigation timeout - still on: ' + currentUrl + ' | title: ' + pageTitle + ' | captchaSolved: ' + captchaSolved);
+      }
       await this.page.waitForLoadState("domcontentloaded");
-      const name = this.getLastPathFromUrl(profileResp.request().url());
+      this.page.off('response', responseHandler);
+      // Extract alias from current URL
       const alias = this.getLastPathFromUrl(this.page.url());
+      const name = capturedProfileName || alias;
+      if (capturedHeaders) {
+        this.headers = capturedHeaders;
+      }
+      //--- append by ai
       this.profile = { alias, name, };
       this.logger.info("get profile success");
       return { id: alias, alias };
@@ -161,11 +212,17 @@ export class BestFansBrowser extends BaseBrowser {
       await this.page.waitForTimeout(3000);
       await this.page.locator("form#posting_upload textarea#post-create-textarea").first().fill(title);
 
-      // set posting period
-      await this.page.locator("form#posting_upload div#configuration_btns button").nth(1).click();
-      await this.page.locator("form#time_settings_form label.radio-block").nth(1).click();
-      await this.page.locator("form#time_settings_form button.btn--submit").last().click();
-      this.logger.info("set time period");
+      //--- append by ai
+      // // set posting period
+      // await this.page.locator("form#posting_upload div#configuration_btns button").nth(1).click();
+      // await this.page.locator("form#time_settings_form label.radio-block").nth(1).click();
+      // await this.page.locator("form#time_settings_form button.btn--submit").last().click();
+      // this.logger.info("set time period");
+      await this.page.locator("form#posting_upload div#configuration_btns button").last().click({ force: true, timeout: 10000 });
+      await this.page.locator("form#tags_form").waitFor({ state: "visible", timeout: 15000 });
+      await this.page.waitForTimeout(1000);
+      this.logger.info("createPost: form#tags_form opened");
+      //--- append by  ai
 
       // set post type
       switch (postType) {
@@ -183,8 +240,10 @@ export class BestFansBrowser extends BaseBrowser {
           await this.page.locator("form#tags_form button.btn--submit").last().click();
           break;
         default:
-          await this.page.locator("form#posting_upload div#configuration_btns button").last().click();
-          await this.page.locator("form#tags_form input#free").first().click();
+          //--- append by ai
+          // await this.page.locator("form#posting_upload div#configuration_btns button").last().click();
+          // await this.page.locator("form#tags_form input#free").first().click();
+          //--- append by ai
           await this.page.locator("form#tags_form button.btn--submit").last().click();
           break;
       }
@@ -213,24 +272,18 @@ export class BestFansBrowser extends BaseBrowser {
       // await this.page.locator("form#posting_upload input#comments_locked").first().check();
 
       // click save button
-      // const storePromise = this.page.waitForResponse(async (resp) => {
-      //   if (resp.request().method().toUpperCase() == "GET")
-      //     return false;
-      //   console.log(`${resp.request().method()} : ${resp.request().url()}`);
-      //   try {
-
-      //     const text = await resp.text();
-      //     console.log("### : ", text.substring(0, 100));
-      //     console.log("$$$ : ", resp.request().postData());
-      //   }
-      //   catch (error) {
-      //     console.error(error);
-      //   }
-      //   if (resp.request().url().includes("/content-impressions/create"))
-      //     return true;
-      //   return false;
-      // });
-      const storePromise = this.page.waitForResponse("https://www.bestfans.com/post/store");
+      //--- append by ai
+      // const storePromise = this.page.waitForResponse("https://www.bestfans.com/post/store");
+      const storePromise = this.page.waitForResponse(
+        (resp) => resp.request().method() !== "GET" && (
+          resp.request().url().includes("/post/store") ||
+          resp.request().url().includes("/content-impressions/create") ||
+          resp.request().url().includes("/post/create") ||
+          resp.request().url().includes("/posting")
+        ),
+        { timeout: 120000 }
+      );
+      //--- append by ai
       await this.page.locator("form#posting_upload div.posting-configuration--navigation button[type='submit']").first().click();
       const storeResp = await storePromise;
       if (!storeResp.ok()) {
@@ -239,10 +292,12 @@ export class BestFansBrowser extends BaseBrowser {
           endpoint: "https://www.bestfans.com/post/store",
           method: "POST",
           status: uploadResp.statusText(),
-          response: await uploadResp.text(),
+          response: (await uploadResp.text()).substring(0, 200),
         });
       }
     } catch (error: any) {
+      if (error instanceof BotError)
+        throw error;
       throw new BotError("create post failed", {
         where: "BestFansBrowser::createPost",
         error: error.message,
