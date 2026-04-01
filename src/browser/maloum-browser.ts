@@ -188,12 +188,51 @@ export class MaloumBrowser extends BaseBrowser {
     });
   }
 
+
+  private categorizeLoginError(status:number, body:string) {
+    const bl = (typeof body === "string" ? body : JSON.stringify(body || {})).toLowerCase();
+    if (bl.includes("block") || bl.includes("suspend") || bl.includes("banned") || bl.includes("locked") || bl.includes("deactivat") || status === 403) return "account blocked (" + status + ")";
+    if (bl.includes("too many") || bl.includes("rate limit") || status === 429) return "too many request (" + status + ")";
+    return "wrong credentials (" + status + ": " + (typeof body === "string" ? body : JSON.stringify(body)).substring(0, 80) + ")";
+  }
+
   public async login(
     setting: IAccountSettings,
   ): Promise<IAccountID | undefined> {
     try {
       // go to login page
+      this.captchaSolved = false;
       await this.page.goto("https://app.maloum.com/login?returnPath=/", { waitUntil: "domcontentloaded", timeout: 60000, });
+      // Wait for Cloudflare captcha to be solved
+      const _captchaStart = Date.now();
+      while (!this.captchaSolved && (Date.now() - _captchaStart) < 60000) {
+        await this.page.waitForTimeout(2000);
+      }
+      if (this.captchaSolved) {
+        this.logger.info("captcha solved, waiting for page to settle");
+        await this.page.waitForTimeout(5000);
+      }
+      // Check if session redirected us away from login
+      if (!this.page.url().includes("/login")) {
+        this.logger.info("session active (redirected to " + this.page.url().substring(0, 40) + ")");
+        if (this.headers["Authorization"]) {
+          try {
+            const meResp = await this.page.request.get("https://api.maloum.com/users/current", { headers: this.headers });
+            if (meResp.ok()) {
+              const meData = await meResp.json();
+              this.profile = { _id: meData.id, username: meData.username, email: meData.email, isCreator: true, hasCompletedSetup: true, isAgeVerified: true, isVerified: true };
+              return { alias: this.profile.username, id: this.profile._id };
+            }
+          } catch (e) { }
+        }
+        this.logger.info("no valid token after redirect, retrying login");
+        this.captchaSolved = false;
+        await this.page.goto("https://app.maloum.com/login?returnPath=/", { waitUntil: "domcontentloaded", timeout: 60000, });
+        const _cs2 = Date.now();
+        while (!this.captchaSolved && (Date.now() - _cs2) < 60000) { await this.page.waitForTimeout(2000); }
+        await this.page.waitForTimeout(3000);
+      }
+
       this.closeConsentModal();
       // input email and password
       await this.page.locator("form input[name='usernameOrEmail']").waitFor();
@@ -207,11 +246,10 @@ export class MaloumBrowser extends BaseBrowser {
 
       const loginBody = await loginResp.text();
       if (loginResp.status() == HttpStatusCode.Unauthorized)
-        throw new AuthError("wrong credentials", {
+        throw new AuthError(this.categorizeLoginError(loginResp.status(), loginBody), {
           where: "MaloumBrowser::login",
           response: loginBody.substring(0, 500),
         });
-
       let loginData;
       try {
         loginData = JSON.parse(loginBody);
@@ -246,14 +284,7 @@ export class MaloumBrowser extends BaseBrowser {
         isCreator: jwt.app_metadata?.roles?.includes("creator"),
         hasCompletedSetup: true,
         isAgeVerified: true,
-        isTrusted: true,
         isVerified: true,
-        language: "en",
-        madeProductPurchase: false,
-        madeProductSale: false,
-        needsAgeVerification: false,
-        registeredAt: new Date().toISOString(),
-        subscriptionPrice: 0,
       };
 
       this.logger.info(`user: ${this.profile.username}, isCreator: ${this.profile.isCreator}`);

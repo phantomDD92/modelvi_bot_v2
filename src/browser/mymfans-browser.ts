@@ -27,7 +27,7 @@ export class MymFansBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
         where: "MymFansBrowser::home",
-        error: error.message,,
+        error: error.message,
       })
     }
   }

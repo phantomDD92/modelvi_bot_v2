@@ -85,14 +85,7 @@ export interface IMaloumProfile {
   hasCompletedSetup: boolean;
   isAgeVerified: boolean;
   isCreator: boolean;
-  isTrusted: boolean;
   isVerified: boolean;
-  language: string;
-  madeProductPurchase: boolean;
-  madeProductSale: boolean;
-  needsAgeVerification: boolean;
-  registeredAt: string;
-  subscriptionPrice: number;
   username: string;
   _id: string;
 }
