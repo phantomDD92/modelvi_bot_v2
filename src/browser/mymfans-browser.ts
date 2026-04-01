@@ -27,8 +27,7 @@ export class MymFansBrowser extends BaseBrowser {
     } catch (error: any) {
       throw new ProxyError("proxy blocked", {
         where: "MymFansBrowser::home",
-        error: error.message,
-        stack: error.stack,
+        error: error.message,,
       })
     }
   }
@@ -46,7 +45,24 @@ export class MymFansBrowser extends BaseBrowser {
 
       await this.page.getByRole('button', { name: 'Login', exact: true }).click();
       const profileResp = await profilePromise;
-      if (profileResp.status() != 200) {
+      if (!profileResp.ok()) {
+        if (profileResp.status() == HttpStatusCode.TooManyRequests) {
+          throw new BotError("too many requests", {
+            where: "MymFansBrowser::login",
+            method: "GET",
+            endpoint: "https://api.mym.fans/creators/me",
+            status: profileResp.statusText(),
+            response: await profileResp.text(),
+          });
+        } else if (profileResp.status() == HttpStatusCode.Forbidden) {
+          throw new AuthError("account blocked", {
+            where: "MymFansBrowser::login",
+            method: "GET",
+            endpoint: "https://api.mym.fans/creators/me",
+            status: profileResp.statusText(),
+            response: await profileResp.text(),
+          });
+        }
         throw new AuthError("wrong credentials", {
           where: "MymFansBrowser::login",
           method: "GET",
@@ -67,7 +83,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("login failed", {
         where: "MymFansBrowser::login",
         error: error.message,
-        stack: error.stack
       })
     }
   }
@@ -136,7 +151,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("create post failed", {
         where: "MymFansBrowser::createPublicPost",
         error: error.message,
-        stack: error.stack
       })
     }
   }
@@ -177,7 +191,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("create post failed", {
         where: "MymFansBrowser::createPublicPostWithMediaId",
         error: error.message,
-        stack: error.stack
       })
     }
   }
@@ -231,7 +244,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("schedule post failed", {
         where: "MymFansBrowser::schedulePost",
         error: error.message,
-        stack: error.stack
       })
     }
   }
@@ -275,7 +287,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("schedule post failed", {
         where: "MymFansBrowser::schedulePostWithMediaId",
         error: error.message,
-        stack: error.stack
       })
     }
   }
@@ -312,7 +323,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("find media failed", {
         where: "MymFansBrowser::findMedia",
         error: error.message,
-        stack: error.stack
       })
     }
   }
@@ -346,7 +356,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("get posts failed", {
         where: "MymFansBrowser::getPosts",
         error: error.message,
-        stack: error.stack
       })
     }
 
@@ -376,7 +385,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("delete post failed", {
         where: "MymFansBrowser::deletePost",
         error: error.message,
-        stack: error.stack
       })
     }
 
@@ -409,7 +417,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("get earnings failed", {
         where: "MymFansBrowser::getMonthlyEarning",
         error: error.message,
-        stack: error.stack
       })
     }
   }
@@ -433,7 +440,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("comment post failed", {
         where: "MymFansBrowser::commentPost",
         error: error.message,
-        stack: error.stack
       });
     }
   }
@@ -455,7 +461,6 @@ export class MymFansBrowser extends BaseBrowser {
       throw new BotError("like post failed", {
         where: "MymFansBrowser::likePost",
         error: error.message,
-        stack: error.stack
       });
     }
   }
