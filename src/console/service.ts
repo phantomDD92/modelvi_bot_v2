@@ -24,9 +24,7 @@ export class ConsoleService {
 
   protected async getRequest(path: string, params: any = undefined) {
     try {
-      const resp = await axios.get(
-        `${this.config.server_root}/api/v2/bot${path}`,
-        { params });
+      const resp = await axios.get(`${this.config.server_root}/api/v2/bot${path}`, { params, timeout: 15000 });
       const { success, message, payload } = resp.data;
       if (!success)
         throw new ConsoleError(message, path);
@@ -44,5 +42,4 @@ export class ConsoleService {
       }
     }
   }
-
 };
