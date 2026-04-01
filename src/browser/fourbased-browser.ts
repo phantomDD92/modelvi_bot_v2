@@ -45,6 +45,16 @@ export class FourBasedBrowser extends BaseBrowser {
   //   });
   // }
 
+
+  //--- append by ai
+  private categorizeLoginError(status: number, body: string) {
+    const bl = (typeof body === "string" ? body : JSON.stringify(body || {})).toLowerCase();
+    if (bl.includes("block") || bl.includes("suspend") || bl.includes("banned") || bl.includes("locked") || bl.includes("deactivat") || status === 403) return "account blocked (" + status + ")";
+    if (bl.includes("too many") || bl.includes("rate limit") || status === 429) return "too many request (" + status + ")";
+    return "wrong credentials (" + status + ": " + (typeof body === "string" ? body : JSON.stringify(body)).substring(0, 80) + ")";
+  }
+  //--- append by ai
+
   public async login(
     setting: IAccountSettings,
   ): Promise<IAccountID | undefined> {
@@ -77,15 +87,20 @@ export class FourBasedBrowser extends BaseBrowser {
 
       await this.page.locator("auth-login ion-button.submit-button").click();
       const loginResp = await loginPromise;
-      if (!loginResp.ok())
-        throw new AuthError("wrong credentials", {
+      if (!loginResp.ok()) {
+        //--- append by ai
+        const body = await loginResp.text();
+        const reason = this.categorizeLoginError(loginResp.status(), body);
+        throw new AuthError(reason, {
           where: "FourBasedBrowser::login",
           method: "POST",
           endpoint: "https://rest.4based.com/api/1.0/auth/login",
           params: loginResp.request().postDataJSON(),
           status: loginResp.statusText(),
-          response: await loginResp.json(),
+          response: body,
         });
+        //--- append by ai
+      }
       const loginData = await loginResp.json();
       this.profile = loginData.user;
       let isCreator = false;
